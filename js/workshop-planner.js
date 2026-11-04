@@ -371,9 +371,11 @@ window.Workshop = (function () {
   function clearPreview() { state.preview = null; }
 
   function apply(plan) {
-    history.push(clone({ cards: live.cards, jobs: live.jobs, holds: live.holds }));
+    // Parts are saved with the diary, so one undo reverses a booking and its parts together.
+    history.push(Object.assign(clone({ cards: live.cards, jobs: live.jobs, holds: live.holds }), { parts: window.Parts ? window.Parts.snapshot() : null }));
     live.cards.forEach((c) => { delete c.ai; });
     applyChanges(live, plan.changes, 'ai');
+    if (plan.partChanges && window.Parts) window.Parts.apply(plan.partChanges);
     state.preview = null;
     state.view = plan.changes.every((c) => c.kind === 'hold' || c.kind === 'bay') ? 'bay' : 'tech';
   }
@@ -382,6 +384,7 @@ window.Workshop = (function () {
     const prior = history.pop();
     if (!prior) return false;
     live.cards = prior.cards; live.jobs = prior.jobs; live.holds = prior.holds;
+    if (prior.parts && window.Parts) window.Parts.restore(prior.parts);
     state.preview = null;
     return true;
   }

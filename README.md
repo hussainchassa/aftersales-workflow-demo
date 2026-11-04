@@ -22,6 +22,11 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
 - **AI Assistance:** the copilot panel, opened from the bottom of the left navigation. Ask "How is my aftersales performing?" and it builds a dashboard in the main area.
 
 - **Booking with technician matching:** "Book an appointment" in the copilot opens a booking form. It suggests a time and technician from each technician's job history, explains why, and offers alternatives. Booking puts the job on the planner.
+- **Extras on the booking call:** after the booking form, "Next" looks the car up and lists extra work worth offering:
+  - what the service schedule says is due or coming up, from the estimated mileage
+  - what the customer turned down on a health check in the last 12 months
+
+  Only extras whose parts can be in Branch 1 by the end of the working day before the appointment are offered, whether from the shelf, a transfer from another branch, or the supplier. The top three are ticked, and the job gets longer to fit them. One "Book and order" confirmation holds the parts and places any transfers or orders, and undo reverses the lot.
 
 To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`.
 
@@ -37,7 +42,19 @@ Each job type is set up to show something different. Book "As soon as possible" 
 | Major service | Four equals, so work is spread: book twice and two different people get it |
 | Tyres | A newer technician gets the job, with a stronger one named as backup |
 
-Open `tests/scenarios.html` to check all five still behave after other copilot actions. It should say "30 of 30 passed".
+### Extras scenarios
+
+Type the registration in the booking form, then click "Next".
+
+| Registration | Job and day | What it shows |
+| --- | --- | --- |
+| SC20 UYT | Major service, Friday | The full story: brake fluid and front pads on the shelf, the battery by transfer from Branch 2, coolant from the supplier, rear tyres greyed out (can't arrive in time), and the air filter included in the service |
+| YF70 KTO | Tyres, today | Everything on the shelf, so it can all be done today |
+| GN19 HVD, then WR69 NMC | Any job, Friday | Both want Branch 1's only set of rear discs. Book the first, and the second shows them greyed out |
+| KY72 BLN | Any job | Nothing due or outstanding |
+| Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
+
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It should say "55 of 55 passed".
 
 ### Questions to try
 
@@ -60,7 +77,10 @@ Open `tests/scenarios.html` to check all five still behave after other copilot a
 | `js/dashboard.js` | Renders the widgets and writes the narrative from the data |
 | `js/optimiser.js` | Plans diary changes, checks them for clashes and shows them for approval |
 | `js/matching.js` | Scores technicians per job type from their history and suggests who and when for a new appointment |
-| `tests/scenarios.html` | Runs the five booking scenarios after different demo orders |
+| `js/parts.js` | Parts stock by branch, holds, transfers and supplier orders, and whether a part can arrive in time |
+| `js/vehicles.js` | Sample cars with mileage and health-check history, the service schedule, and what each job already covers |
+| `js/upsell.js` | Works out the extras worth offering for a car and appointment day, in the order to raise them |
+| `tests/scenarios.html` | Runs the matching and extras scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
 | `js/copilot.js` | The chat panel |
 | `js/workshop-planner.js` | The planner screen |
@@ -70,6 +90,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't.
 
 Chad made this edit

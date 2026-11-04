@@ -244,11 +244,13 @@ window.Matching = (function () {
   }
 
   /**
-   * request: { type, date, window: 'asap' | 'morning' | 'afternoon' | start hour, customer }
+   * request: { type, date, window: 'asap' | 'morning' | 'afternoon' | start hour, customer, extraHours }
    * Returns { main, alts, moved, steps } or null when nobody can take it in the next two weeks.
    */
   function suggest(request, snap) {
-    const type = typeOf(request.type);
+    // Extras agreed on the call make the job longer, so the slot has to fit the lot.
+    const base = typeOf(request.type);
+    const type = request.extraHours ? Object.assign({}, base, { std: base.std + request.extraHours }) : base;
     const ranked = stats(type.id);
     const date = request.date || snap.today;
     const window = request.window || 'asap';
