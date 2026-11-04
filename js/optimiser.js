@@ -334,5 +334,8 @@ window.Optimiser = (function () {
     mount.querySelector('#dash').scrollTop = top;
   }
 
-  return { create, render, toggle };
+  // Shared with Matching, so new appointments obey the same diary rules as plans.
+  const rules = { abs, overlaps, hhmm, when, ceilQuarter, dowOf, techBusy, techAway, bayBusy, baysFor, isApprentice, needsSeniorTech, dayLoad, validate };
+
+  return { create, render, toggle, rules };
 })();

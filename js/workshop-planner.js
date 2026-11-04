@@ -55,6 +55,10 @@ window.Workshop = (function () {
     { bay: 'Ramp 2', res: 'Ash Meehan Tech', from: ['2026-11-04', 7], to: ['2026-11-15', 17.5], l1: 'ND01001 - Mercedes-benz - Diesel - WDC156946ND01A0001 - 94177', l2: 'London Borough Of Croydon - Load Hours: 110.20', hrs: 110.2, tags: ['arrived'] },
     { bay: 'Ramp 3', res: 'Callum Tech Birch', from: ['2026-11-04', 11.8], to: ['2026-11-04', 15.2], l1: 'BN77 JUJ - Jaguar - F-Pace', l2: 'Pinewood - Load Hours: 3.40', hrs: 3.4, ghost: 1, tags: [] },
     { bay: 'Ramp 6', res: 'Febin Tech 1', from: ['2026-11-04', 12], to: ['2026-11-04', 13.5], l1: 'Acura - MDX', l2: 'Mr B Thomas - Load Hours: 1.50', hrs: 1.5, ghost: 1, tags: ['wyw'] },
+    // Not in the screenshot. Thursday bookings that set up the diagnostics matching scenario.
+    { bay: 'Ramp 3', res: 'Isobel Weaver', from: ['2026-11-05', 8], to: ['2026-11-05', 13.5], l1: 'KE70 RWD - Land Rover - Discovery Sport', l2: 'Ms L Grant - Load Hours: 5.50', hrs: 5.5, tags: [] },
+    { bay: 'Ramp 6', res: 'Louis TWilbourne', from: ['2026-11-05', 8], to: ['2026-11-05', 10.5], l1: 'MW19 HKP - Volvo - XC60', l2: 'Mr D Okafor - Load Hours: 2.50', hrs: 2.5, tags: [] },
+    { bay: 'Ramp 7', res: 'Justin Smith', from: ['2026-11-05', 8], to: ['2026-11-05', 9], l1: 'GY21 NBF - Skoda - Octavia', l2: 'Mrs P Hughes - Load Hours: 1.00', hrs: 1, tags: [] },
   ];
 
   const j = (date, l1, l2, hrs, tags) => ({ date, l1, l2, hrs, tags: tags || [] });
@@ -161,6 +165,11 @@ window.Workshop = (function () {
         target.cards.push({
           id: `b${job.id}`, res: c.res, bay: c.bay, from: c.from, to: c.to, hrs: job.hrs, tags: job.tags,
           l1: job.l1, l2: `${job.l2} - Load Hours: ${job.hrs.toFixed(2)}`, [mark]: true,
+        });
+      } else if (c.kind === 'appointment') {
+        target.cards.push({
+          id: c.id, res: c.res, bay: c.bay, from: c.from, to: c.to, hrs: c.hrs, tags: [],
+          l1: c.l1, l2: `${c.l2} - Load Hours: ${c.hrs.toFixed(2)}`, [mark]: true,
         });
       }
     });

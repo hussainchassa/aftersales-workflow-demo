@@ -21,10 +21,27 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
 - **Technician planner:** a rebuild of the Pinewood workshop planner, with the date range, scale slider, filters and unallocated jobs working.
 - **AI Assistance:** the copilot panel, opened from the bottom of the left navigation. Ask "How is my aftersales performing?" and it builds a dashboard in the main area.
 
+- **Booking with technician matching:** "Book an appointment" in the copilot opens a booking form. It suggests a time and technician from each technician's job history, explains why, and offers alternatives. Booking puts the job on the planner.
+
 To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`.
+
+### Booking scenarios
+
+Each job type is set up to show something different. Book "As soon as possible" today unless stated.
+
+| Job type | What it shows |
+| --- | --- |
+| Brakes | One clear best technician, free today |
+| Diesel | The best diesel technician is away until Friday, so the next best is suggested and Friday is offered |
+| Diagnostics (tomorrow, morning) | The fastest technician has the most comebacks. The best is fully booked, so a close second who's less busy gets it |
+| Major service | Four equals, so work is spread: book twice and two different people get it |
+| Tyres | A newer technician gets the job, with a stronger one named as backup |
+
+Open `tests/scenarios.html` to check all five still behave after other copilot actions. It should say "30 of 30 passed".
 
 ### Questions to try
 
+- Book an appointment
 - How is my aftersales performing?
 - Why is efficiency down at Branch 2?
 - Which technicians are under-utilised?
@@ -42,6 +59,8 @@ To open straight on an answer when presenting, use `index.html?ask=How%20is%20my
 | `js/intent.js` | Turns a question into a state object, then a list of widgets |
 | `js/dashboard.js` | Renders the widgets and writes the narrative from the data |
 | `js/optimiser.js` | Plans diary changes, checks them for clashes and shows them for approval |
+| `js/matching.js` | Scores technicians per job type from their history and suggests who and when for a new appointment |
+| `tests/scenarios.html` | Runs the five booking scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
 | `js/copilot.js` | The chat panel |
 | `js/workshop-planner.js` | The planner screen |
@@ -51,6 +70,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario.
 
 Chad made this edit

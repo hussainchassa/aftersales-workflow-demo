@@ -154,6 +154,7 @@ window.Intent = (function () {
     }
     if (/^(yes|yep|apply( it| the plan)?|do it|go ahead|approve( it)?|confirm)\b/.test(t)) return { kind: 'approve' };
     if (/^undo\b/.test(t)) return { kind: 'undo' };
+    if (/\b(book|make|new|schedule|take)\b.*\b(appointment|booking)s?\b/.test(t) || /^book (a |an )?(job|car|vehicle|service|customer)\b/.test(t)) return { kind: 'book' };
     const bayWord = /work ?bays?|\bbays?\b|\bramps?\b/.test(t);
     const techWord = /technicians?|\btechs?\b|unallocated/.test(t);
     if (/\b(fix|optimi[sz]e|improve|sort out)\b/.test(t) || /^(allocate|assign|book in)\b.*\b(unallocated|all|everything)\b/.test(t)) {
