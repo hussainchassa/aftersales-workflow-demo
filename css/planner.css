@@ -1,0 +1,81 @@
+/* Technician planner screen. */
+.planner { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--gutter); }
+
+.pl-toolbar { position: relative; flex: none; height: 41px; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--toolbar); }
+.pl-toolbar input[type="date"] { width: 118px; height: 26px; padding: 0 5px; border: 1px solid #c9c8ce; border-radius: 4px; background: #fff; }
+.pl-toolbar input[type="date"]:focus { outline: 2px solid #111; outline-offset: -1px; border-radius: 4px; }
+.pl-go { width: 26px; height: 26px; border: 0; border-radius: 4px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pl-go:hover { background: var(--brand-600); }
+.pl-check { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); cursor: pointer; margin-left: 6px; padding-right: 12px; border-right: 1px solid #d6d5da; height: 26px; }
+.check { appearance: none; width: 15px; height: 15px; margin: 0; flex: none; border: 1px solid #b9b8c0; border-radius: 3px; background: #fff; cursor: pointer; position: relative; }
+.check:checked { background: var(--brand); border-color: var(--brand); }
+.check:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.pl-scale { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); margin-left: 6px; }
+.pl-scale input { appearance: none; width: 145px; height: 8px; border-radius: 4px; background: #c9c8ce; cursor: pointer; }
+.pl-scale input::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--brand); }
+.pl-scale input::-moz-range-thumb { width: 8px; height: 8px; border-radius: 50%; background: #fff; border: 4px solid var(--brand); }
+.pl-progress { position: absolute; left: 0; bottom: 0; height: 1px; width: 100%; background: var(--green); transform-origin: left; }
+.pl-progress.run { animation: pl-load .7s ease-out; }
+@keyframes pl-load { from { transform: scaleX(0); } }
+
+.pl-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 6px; padding: 6px 6px 6px 8px; }
+.pl-panel { width: 200px; flex: none; background: #fff; border-radius: 9px; overflow-y: auto; }
+.pl-h { display: flex; justify-content: space-between; padding: 7px 8px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink); border-bottom: 1px solid var(--line-2); }
+.pl-section { padding-bottom: 12px; }
+.pl-f { display: grid; grid-template-columns: 15px 1fr auto; gap: 10px; align-items: center; padding: 5px 8px; color: var(--ink-2); font-size: 12px; line-height: 14px; cursor: pointer; }
+.pl-f b { font-weight: 600; }
+.pl-search { display: block; width: calc(100% - 16px); height: 24px; margin: 6px 8px 2px; padding: 0 6px; border: 1px solid #c9c8ce; border-radius: 3px; font-size: 12px; }
+.pl-day { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 8px; border: 0; background: none; color: var(--ink-2); cursor: pointer; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pl-day:hover { background: var(--brand-50); }
+.pl-day svg { color: var(--brand); width: 13px; height: 13px; transition: transform .12s; }
+.pl-day[aria-expanded="true"] svg { transform: rotate(90deg); }
+.pl-day b { margin-left: auto; font-weight: 600; }
+.pl-job { margin: 2px 8px 4px 20px; padding: 5px 7px; border: 1px solid #c9c8ce; border-bottom-width: 3px; border-radius: 4px; font-size: 11.5px; line-height: 15px; color: var(--ink-2); }
+.pl-job b { display: block; font-weight: 600; color: var(--ink); }
+.pl-chip { padding: 0 5px; min-width: 18px; text-align: center; border-radius: 3px; background: #c9c8ce; color: var(--ink); font-weight: 700; }
+
+.pl-grid { flex: 1 1 auto; min-width: 0; background: #fff; border-radius: 9px; overflow: auto; position: relative; }
+.pl-inner { position: relative; min-width: max-content; }
+.pl-head { position: sticky; top: 0; z-index: 6; display: flex; background: #fff; }
+.pl-corner { position: sticky; left: 0; z-index: 7; width: var(--res); flex: none; background: linear-gradient(#fff 0 31px, #f5f5f6 31px); border-right: 1px solid #cfcfd4; border-bottom: 1px solid #dcdce0; }
+.pl-dayh { flex: none; width: calc(var(--h) * 12); border-right: 1px solid #8d8d93; }
+.pl-dayt { height: 31px; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; color: var(--ink); }
+.pl-hours { display: flex; height: 19px; background: #f5f5f6; border-bottom: 1px solid #dcdce0; border-top: 1px solid #dcdce0; }
+.pl-hours span { flex: 1 1 0; min-width: 0; padding-left: 5px; font-size: 11.5px; line-height: 17px; color: var(--ink-2); border-left: 1px solid #dcdce0; overflow: hidden; }
+.pl-hours span:first-child { border-left: 0; }
+.pl-row { display: flex; height: 48px; }
+.pl-res { position: sticky; left: 0; z-index: 4; width: var(--res); flex: none; display: flex; align-items: flex-start; gap: 4px; padding: 11px 6px 0 8px; background: #fff; border-right: 1px solid #cfcfd4; border-bottom: 1px solid #e6e6e9; color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.pl-res span { overflow: hidden; text-overflow: ellipsis; }
+.pl-res svg { color: var(--warn); width: 14px; height: 14px; }
+.pl-track { position: relative; flex: none; width: var(--w); border-bottom: 1px solid #e6e6e9; }
+.pl-track::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background-image:
+    linear-gradient(to right, #8d8d93 1px, transparent 1px),
+    linear-gradient(to right, #d9d9dd 1px, transparent 1px),
+    linear-gradient(to right, #f0f0f2 1px, transparent 1px);
+  background-size: calc(var(--h) * 12) 100%, var(--h) 100%, calc(var(--h) / 4) 100%;
+}
+.pl-off { position: absolute; top: 0; bottom: 0; background: #e5e5e5; }
+.pl-abs { position: absolute; top: 0; bottom: 0; z-index: 2; background: rgba(226, 134, 134, .42); color: var(--ink-2); padding: 14px 4px 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-card { position: absolute; top: 1px; bottom: 1px; z-index: 3; padding: 5px 4px 0; background: #fff; border: 1px solid #8d8d93; border-bottom: 4px solid #9b9ba1; border-radius: 4px; font-size: 12px; line-height: 14px; color: var(--ink-2); white-space: nowrap; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.1); cursor: default; }
+.pl-card div { overflow: hidden; text-overflow: ellipsis; }
+.pl-card small { font-size: 11px; }
+.pl-card.ghost { opacity: .34; background: #f7e3e3; }
+.pl-card.dim { opacity: .3; }
+.pl-now { position: absolute; top: 31px; bottom: 0; width: 1px; background: #484463; z-index: 5; pointer-events: none; }
+.pl-now::before { content: ''; position: absolute; left: -4px; top: 13px; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-top: 6px solid #484463; }
+
+@media (max-width: 1180px) { .pl-panel { display: none; } }
+@media (max-width: 760px) { .pl-scale { display: none; } }
+
+/* Technicians / Workbays switch, preview banner and AI-made cards */
+.pl-seg { display: inline-flex; margin-left: 6px; border: 1px solid #c9c8ce; border-radius: 5px; overflow: hidden; background: #fff; }
+.pl-seg button { height: 24px; padding: 0 9px; border: 0; background: none; color: var(--ink-2); font-size: 12px; cursor: pointer; }
+.pl-seg button[aria-pressed="true"] { background: var(--brand); color: #fff; font-weight: 600; }
+.pl-banner { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--brand-50); border-bottom: 1px solid var(--brand-100); color: var(--ink); }
+.pl-banner b { font-weight: 700; }
+.pl-banner svg { color: var(--brand); }
+.pl-card.prop { border: 1.5px dashed var(--brand); border-bottom: 4px solid var(--brand-200); background: var(--brand-50); opacity: 1; }
+.pl-card.ai { border-color: var(--brand); border-bottom-color: #b24bc8; box-shadow: 0 0 0 1px var(--brand-100); animation: pl-pop .35s ease-out backwards; }
+@keyframes pl-pop { from { opacity: 0; transform: scale(.96); } }
