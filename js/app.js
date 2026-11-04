@@ -167,7 +167,17 @@ window.App = (function () {
       card.querySelector('.w-t').classList.toggle('hide', showing);
     },
     'df-clear': () => window.Copilot.applyFilter('clear'),
+    'bk-type': (el) => window.Copilot.bookingType(el.dataset.m, el.dataset.v),
+    'bk-find': (el) => window.Copilot.findTechnician(el.dataset.m),
+    'bk-book': (el) => window.Copilot.book(el.dataset.m, el.dataset.v),
+    'bk-preview': (el) => window.Copilot.previewBooking(el.dataset.m, el.dataset.v),
   };
+
+  // Booking form fields live in chat messages that repaint, so their values are kept on the message.
+  document.addEventListener('input', (e) => {
+    const field = e.target.dataset && e.target.dataset.bf;
+    if (field) window.Copilot.formInput(e.target.dataset.m, field, e.target.value);
+  });
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-a]');

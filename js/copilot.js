@@ -17,6 +17,7 @@ window.Copilot = (function () {
   const S = { open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null };
 
   const STARTERS = [
+    'Book an appointment',
     'How is my aftersales performing?',
     'Which technicians are under-utilised?',
     'Where am I losing money?',
@@ -57,8 +58,10 @@ window.Copilot = (function () {
         ${live && m.plan.changes.length ? `<div class="c-acts"><button class="btn s p" data-a="plan-apply">Apply ${m.plan.changes.length} changes</button><button class="btn s" data-a="plan-preview">Preview on planner</button></div>` : ''}
         <div class="safe">${ic('lock', 'sm')}${m.plan.applied ? 'You approved this plan.' : m.plan.changes.length ? 'Nothing has changed yet. You approve it first.' : 'Nothing has changed.'}</div></div>`;
     }
+    if (m.kind === 'booking-form') return bookingFormHtml(m);
+    if (m.kind === 'booking-suggestion') return suggestionHtml(m);
     if (m.kind === 'applied') {
-      return `<div class="ccard"><div class="c-result">${ic('check', 'sm')} Done. ${m.count} changes are in the diary.</div><div class="sm">${esc(m.detail)}</div>
+      return `<div class="ccard"><div class="c-result">${ic('check', 'sm')} Done. ${m.count === 1 ? '1 change is' : `${m.count} changes are`} in the diary.</div><div class="sm">${esc(m.detail)}</div>
         <ul class="c-log">${m.log.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
         ${m.undone ? '<div class="sm muted">Undone.</div>' : `<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button><button class="btn s" data-a="go-dash">Back to the dashboard</button></div>`}
         <div class="safe">${ic('info', 'sm')}Approved by you at 09:42. Sample diary, so nothing leaves this demo.</div></div>`;
@@ -155,6 +158,8 @@ window.Copilot = (function () {
         else S.messages.push({ role: 'a', text: 'There\'s no plan waiting for approval.', chips: ['Fix my workbays and technicians'] });
       } else if (result.kind === 'undo') {
         undoPlan();
+      } else if (result.kind === 'book') {
+        openBooking();
       } else if (result.kind === 'nav') {
         S.messages.push({ role: 'a', text: result.text });
         window.App.showPlanner();
@@ -241,7 +246,7 @@ window.Copilot = (function () {
     await runSteps(plan.items.filter((i) => i.on && i.changes.length).map((i) => `${i.doing}`));
     window.Workshop.apply(plan);
     S.messages.push({
-      role: 'a', kind: 'applied', count: plan.changes.length, detail: plan.doneText,
+      role: 'a', kind: 'applied', count: plan.changes.length, detail: plan.doneText, booking: plan.booking,
       log: plan.items.filter((i) => i.on && i.changes.length).map((i) => i.logText),
     });
     window.App.showPlanner();
@@ -257,10 +262,174 @@ window.Copilot = (function () {
     }
     const m = [...S.messages].reverse().find((x) => x.kind === 'applied' && !x.undone);
     if (m) m.undone = true;
+    if (m && m.booking) {
+      const sug = S.messages.find((x) => x.kind === 'booking-suggestion' && x.id === m.booking.id);
+      if (sug) sug.booked = null;
+    }
     S.plan = null;
     S.messages.push({ role: 'a', text: 'I\'ve put the diary back as it was.' });
     window.App.showPlanner();
     paint(true);
+  }
+
+  /* ---------- booking an appointment ---------- */
+
+  let bookingSeq = 0;
+  const hhmm = (h) => window.Optimiser.rules.hhmm(h);
+  const findMsg = (kind, id) => S.messages.find((x) => x.kind === kind && x.id === Number(id));
+
+  function openBooking() {
+    const snap = window.Workshop.snapshot();
+    S.messages.push({ role: 'a', text: "Fill in what the customer tells you, and I'll find the best technician and time." });
+    S.messages.push({
+      role: 'a', kind: 'booking-form', id: ++bookingSeq, done: false, error: '',
+      form: { customer: '', phone: '', reg: '', vehicle: '', type: null, date: snap.today, window: 'asap' },
+    });
+  }
+
+  /** Working days from today, for the day picker. */
+  function bookingDays(snap) {
+    const out = [];
+    for (let i = 0; out.length < 12; i++) {
+      const date = AS.toIso(AS.toN(snap.today) + i);
+      if (AS.dateOf(AS.toN(date)).getUTCDay() === 0) continue; // Closed on Sundays.
+      const word = window.Matching.dayWord(date, snap);
+      out.push({ date, label: word === 'today' || word === 'tomorrow' ? `${word[0].toUpperCase()}${word.slice(1)}, ${window.Matching.dayShort(date)}` : window.Matching.dayShort(date) });
+    }
+    return out;
+  }
+
+  const WINDOWS = [['asap', 'As soon as possible'], ['morning', 'Morning'], ['afternoon', 'Afternoon'],
+    ...Array.from({ length: 10 }, (_, i) => [String(8 + i), `From ${String(8 + i).padStart(2, '0')}:00`])];
+
+  function bookingFormHtml(m) {
+    const f = m.form;
+    if (m.done) {
+      const day = bookingDays(window.Workshop.snapshot()).find((d) => d.date === f.date);
+      return `<div class="ccard bk"><div class="bk-h">New appointment</div>
+        <div class="sm"><b>${esc(f.type)}</b> for ${esc(f.customer || 'the customer')}${f.reg ? `, ${esc(f.reg)}` : ''}${f.vehicle ? ` ${esc(f.vehicle)}` : ''}</div>
+        <div class="sm muted">${esc(day ? day.label : f.date)}, ${esc(WINDOWS.find((w) => w[0] === f.window)[1].toLowerCase())}${f.phone ? ` · ${esc(f.phone)}` : ''}</div></div>`;
+    }
+    const field = (name, label, ph) => `<label class="bk-f"><span>${label}</span><input data-bf="${name}" data-m="${m.id}" value="${esc(f[name])}" placeholder="${ph}" autocomplete="off"></label>`;
+    const days = bookingDays(window.Workshop.snapshot());
+    return `<div class="ccard bk"><div class="bk-h">New appointment</div>
+      ${field('customer', 'Customer', 'Name')}
+      ${field('phone', 'Phone', 'Number')}
+      ${field('reg', 'Registration', 'e.g. SC20 UYT')}
+      ${field('vehicle', 'Make and model', 'e.g. Jaguar E-Pace')}
+      <div class="bk-f"><span>Job</span><div class="bk-types" role="group" aria-label="Job type">${window.Matching.TYPES.map((t) => `<button class="qchip" data-a="bk-type" data-m="${m.id}" data-v="${esc(t.id)}" aria-pressed="${f.type === t.id}">${esc(t.id)}</button>`).join('')}</div></div>
+      <label class="bk-f"><span>Day</span><select data-bf="date" data-m="${m.id}">${days.map((d) => `<option value="${d.date}" ${d.date === f.date ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>
+      <label class="bk-f"><span>Time</span><select data-bf="window" data-m="${m.id}">${WINDOWS.map(([v, l]) => `<option value="${v}" ${v === f.window ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${m.error ? `<div class="sm bk-err">${ic('alert', 'sm')}<span>${esc(m.error)}</span></div>` : ''}
+      <div class="c-acts"><button class="btn s p" data-a="bk-find" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Find a technician</button></div></div>`;
+  }
+
+  function optionHtml(m, o, i) {
+    const chips = `<div class="bk-stats">${o.stats.map((s) => `<span class="${s.tone || ''}">${esc(s.text)}</span>`).join('')}</div>`;
+    const open = m.booked == null;
+    if (i === 0) {
+      return `<div class="bk-slot">${esc(window.Matching.dayShort(o.date))}, ${hhmm(o.from)} to ${hhmm(o.to)}</div>
+        <div class="bk-who">${esc(o.tech)} · ${esc(o.bay)}</div>
+        <div class="sm">${esc(o.reason)}</div>${chips}
+        ${open ? `<div class="c-acts"><button class="btn s p" data-a="bk-book" data-m="${m.id}" data-v="0">Book ${esc(o.tech.split(/\s+/)[0])}, ${esc(window.Matching.dayShort(o.date).split(' ')[0])} ${hhmm(o.from)}</button><button class="btn s" data-a="bk-preview" data-m="${m.id}" data-v="0">Preview on planner</button></div>` : ''}`;
+    }
+    return `<div class="bk-alt"><div class="bk-alt-h"><div><b>${esc(o.label)}</b><span>${esc(o.tech)} · ${esc(window.Matching.dayShort(o.date))} ${hhmm(o.from)}</span></div>
+      ${open ? `<button class="btn s" data-a="bk-book" data-m="${m.id}" data-v="${i}">Book instead</button>` : ''}</div>
+      ${o.reason ? `<div class="sm">${esc(o.reason)}</div>` : ''}${chips}</div>`;
+  }
+
+  function suggestionHtml(m) {
+    const r = m.result;
+    if (!r.main) return `<div class="msg-a col"><span>Nobody can take ${esc(m.req.type.toLowerCase())} work in the next two weeks. Try another job type, or check the planner for absences.</span></div>`;
+    const opts = [r.main, ...r.alts];
+    const booked = m.booked != null ? opts[m.booked] : null;
+    return `<div class="ccard bk-s">${opts.map((o, i) => optionHtml(m, o, i)).join('')}
+      <div class="safe">${ic(booked ? 'check' : 'lock', 'sm')}${booked ? `Booked with ${esc(booked.tech)}, ${esc(window.Matching.dayShort(booked.date))} ${hhmm(booked.from)}.` : 'Sample data. Nothing is booked until you click.'}</div></div>`;
+  }
+
+  /** Typing into the form updates its message without a repaint, so focus stays put. */
+  function formInput(id, field, value) {
+    const m = findMsg('booking-form', id);
+    if (m && !m.done) m.form[field] = value;
+  }
+
+  function bookingType(id, type) {
+    const m = findMsg('booking-form', id);
+    if (!m || m.done) return;
+    m.form.type = type;
+    m.error = '';
+    paint();
+  }
+
+  async function findTechnician(id) {
+    const m = findMsg('booking-form', id);
+    if (!m || m.done || S.busy) return;
+    if (!m.form.type) { m.error = 'Choose the job type first.'; paint(); return; }
+    S.busy = true;
+    m.done = true;
+    const f = m.form;
+    const req = { type: f.type, date: f.date, window: /^\d+$/.test(f.window) ? Number(f.window) : f.window, customer: f.customer.trim() };
+    try {
+      const result = window.Matching.suggest(req, window.Workshop.snapshot());
+      await runSteps(result.steps);
+      S.messages.push({ role: 'a', kind: 'booking-suggestion', id: m.id, req, form: Object.assign({}, f), result, booked: null });
+    } catch (err) {
+      console.error(err);
+      m.done = false;
+      S.messages.push({ role: 'a', text: 'Something went wrong finding a technician. Nothing has been booked.' });
+    }
+    S.busy = false;
+    paint(true);
+  }
+
+  /** A one-change plan, so booking reuses the approve, preview and undo flow. */
+  function bookingPlan(m, idx) {
+    const o = idx === 0 ? m.result.main : m.result.alts[idx - 1];
+    const f = m.form;
+    const type = window.Matching.typeOf(f.type);
+    const change = {
+      kind: 'appointment', id: `a${m.id}`, res: o.tech, bay: o.bay, from: [o.date, o.from], to: [o.date, o.to], hrs: o.to - o.from,
+      l1: [f.reg.trim().toUpperCase(), f.vehicle.trim()].filter(Boolean).join(' - ') || 'New appointment',
+      l2: [type.desc, f.customer.trim()].filter(Boolean).join(' - '),
+    };
+    const when = `${window.Matching.dayShort(o.date)} ${hhmm(o.from)}`;
+    return {
+      changes: [change], booking: { id: m.id, idx },
+      items: [{ on: true, changes: [change], doing: `Adding the appointment to ${o.tech.split(/\s+/)[0]}'s diary`, logText: `${change.l1} booked with ${o.tech}, ${when}, ${o.bay}` }],
+      doneText: 'The new appointment is highlighted on the planner.',
+    };
+  }
+
+  /** The diary may have changed since the suggestion, so re-check before booking. */
+  function stillFree(plan) {
+    const snap = window.Workshop.snapshot();
+    const c = plan.changes[0];
+    snap.cards.push({ id: c.id, res: c.res, bay: c.bay, from: c.from, to: c.to, hrs: c.hrs, l2: c.l2 });
+    return window.Optimiser.rules.validate(snap, plan).every((x) => x.pass);
+  }
+
+  async function book(id, idx) {
+    const m = findMsg('booking-suggestion', id);
+    if (!m || m.booked != null || S.busy) return;
+    const plan = bookingPlan(m, Number(idx));
+    if (!stillFree(plan)) {
+      const form = findMsg('booking-form', id);
+      if (form) form.done = false;
+      S.messages.push({ role: 'a', text: "That time has just been taken in the diary, so I haven't booked it. Click **Find a technician** again for a fresh suggestion." });
+      paint(true);
+      return;
+    }
+    m.booked = Number(idx);
+    S.plan = plan;
+    await applyPlan();
+  }
+
+  function previewBooking(id, idx) {
+    const m = findMsg('booking-suggestion', id);
+    if (!m || m.booked != null) return;
+    S.plan = bookingPlan(m, Number(idx));
+    window.Workshop.preview(S.plan);
+    window.App.showPlanner();
   }
 
   function forwardNarrative() {
@@ -299,5 +468,5 @@ window.Copilot = (function () {
     paint();
   }
 
-  return { send, setOpen, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan };
+  return { send, setOpen, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, findTechnician, book, previewBooking };
 })();

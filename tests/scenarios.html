@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matching scenarios</title>
+<style>
+  :root { --ink: #231c3e; --muted: #6a6878; --line: #e2e1e8; --ok: #256b2a; --ok-bg: #e6f3e7; --bad: #a8231b; --bad-bg: #fdecea; }
+  body { margin: 0; padding: 20px 16px; font: 13px/18px system-ui, sans-serif; color: var(--ink); background: #fff; }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  p { margin: 0 0 14px; color: var(--muted); }
+  .tw { overflow-x: auto; }
+  table { border-collapse: collapse; min-width: 640px; }
+  th, td { padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .pass { color: var(--ok); background: var(--ok-bg); font-weight: 600; }
+  .fail { color: var(--bad); background: var(--bad-bg); font-weight: 600; }
+  #sum { font-weight: 700; margin-bottom: 10px; }
+  iframe { display: none; }
+</style>
+<script src="../js/aftersales-data.js"></script>
+<script src="../js/workshop-planner.js"></script>
+<script src="../js/optimiser.js"></script>
+<script src="../js/matching.js"></script>
+</head>
+<body>
+<h1>Matching scenarios</h1>
+<p>Runs each demo scenario on a fresh copy of the app, after different things have already happened in the diary.</p>
+<div id="sum">Running…</div>
+<div class="tw"><table><thead><tr><th>Setup</th><th>Scenario</th><th>Result</th><th>Got</th></tr></thead><tbody id="rows"></tbody></table></div>
+<script>
+'use strict';
+const TODAY = '2026-11-04';
+const THURSDAY = '2026-11-05';
+const FRIDAY = '2026-11-06';
+const EQUALS = ['Ana Ceban', 'Hugin Technician', 'John TECH Celeste', 'Megan Livermore'];
+
+/** A fresh app in a hidden frame, so every run starts from the page-load diary. */
+function fresh() {
+  return new Promise((resolve) => {
+    const f = document.createElement('iframe');
+    f.src = location.pathname + '?frame=' + Math.random();
+    f.onload = () => resolve(f);
+    document.body.appendChild(f);
+  });
+}
+
+let seq = 0;
+function book(w, option, type) {
+  const change = { kind: 'appointment', id: `t${++seq}`, res: option.tech, bay: option.bay, from: [option.date, option.from], to: [option.date, option.to], hrs: option.to - option.from, l1: 'TEST', l2: type };
+  w.Workshop.apply({ changes: [change] });
+}
+const ask = (w, type, date, window) => w.Matching.suggest({ type, date, window, customer: 'Mr Patel' }, w.Workshop.snapshot());
+const bookAsap = (w, type) => { const r = ask(w, type, TODAY, 'asap'); if (r.main) book(w, r.main, type); };
+
+const SCENARIOS = {
+  Brakes(w) {
+    const r = ask(w, 'Brakes', TODAY, 'asap');
+    return { ok: r.main && r.main.tech === 'Mark Tech Bacalla' && r.main.date === TODAY, got: r.main && `${r.main.tech}, ${r.main.date} ${r.main.from}` };
+  },
+  Diesel(w) {
+    const r = ask(w, 'Diesel', TODAY, 'asap');
+    const callum = r.alts.find((a) => a.tech === 'Callum Tech Birch');
+    return { ok: r.main && r.main.tech === 'Krzysztof Dyner' && /Callum is away/.test(r.main.reason) && callum && callum.date === FRIDAY, got: r.main && `${r.main.tech}. ${r.main.reason} Alt: ${callum ? `${callum.label}, ${callum.date}` : 'none'}` };
+  },
+  Diagnostics(w) {
+    const r = ask(w, 'Diagnostics', THURSDAY, 'morning');
+    const isobel = r.alts.find((a) => a.tech === 'Isobel Weaver');
+    const louis = r.alts.find((a) => a.tech === 'Louis TWilbourne');
+    return { ok: r.main && r.main.tech === 'Justin Smith' && r.main.date === THURSDAY && isobel && /afternoon/.test(isobel.label) && !!louis, got: r.main && `${r.main.tech} ${r.main.from}. ${r.main.reason} Alts: ${r.alts.map((a) => `${a.label} (${a.tech})`).join('; ')}` };
+  },
+  'Major service'(w) {
+    const a = ask(w, 'Major service', TODAY, 'asap');
+    if (a.main) book(w, a.main, 'Major service');
+    const b = ask(w, 'Major service', TODAY, 'asap');
+    const ok = a.main && b.main && EQUALS.includes(a.main.tech) && EQUALS.includes(b.main.tech) && a.main.tech !== b.main.tech;
+    return { ok, got: `${a.main && a.main.tech}, then ${b.main && b.main.tech}. ${b.main && b.main.reason}` };
+  },
+  Tyres(w) {
+    const r = ask(w, 'Tyres', TODAY, 'asap');
+    return { ok: r.main && r.main.tech === 'Megan Walker - Tech' && r.main.limited && /Lewis/.test(r.main.reason), got: r.main && `${r.main.tech}. ${r.main.reason}` };
+  },
+};
+
+const SETUPS = {
+  'Fresh load': () => {},
+  'After "Fix my workbays"': (w) => w.Workshop.apply(w.Optimiser.create('all')),
+  'After the other four': (w, name) => Object.keys(SCENARIOS).filter((n) => n !== name).forEach((n) => (n === 'Diagnostics' ? (() => { const r = ask(w, n, THURSDAY, 'morning'); if (r.main) book(w, r.main, n); })() : bookAsap(w, n))),
+  'After a booking and undo': (w, name) => { bookAsap(w, name); w.Workshop.undo(); },
+  'Fix, then the other four': (w, name) => { SETUPS['After "Fix my workbays"'](w); SETUPS['After the other four'](w, name); },
+  'Other four, then fix': (w, name) => { SETUPS['After the other four'](w, name); SETUPS['After "Fix my workbays"'](w); },
+};
+
+async function run() {
+  const rows = document.getElementById('rows');
+  let pass = 0;
+  let total = 0;
+  for (const [setup, prep] of Object.entries(SETUPS)) {
+    for (const [name, check] of Object.entries(SCENARIOS)) {
+      const f = await fresh();
+      const w = f.contentWindow;
+      let res;
+      try { prep(w, name); res = check(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+      total++; if (res.ok) pass++;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${setup}</td><td>${name}</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
+      tr.lastChild.textContent = res.got || '';
+      rows.appendChild(tr);
+      f.remove();
+    }
+  }
+  const sum = document.getElementById('sum');
+  sum.textContent = `${pass} of ${total} passed`;
+  sum.className = pass === total ? 'pass' : 'fail';
+  window.RESULT = { pass, total };
+}
+
+// Inside the hidden frame, loading the scripts above is all this page does.
+if (window.top === window) run();
+</script>
+</body>
+</html>
