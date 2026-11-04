@@ -59,6 +59,7 @@ window.Copilot = (function () {
         <div class="safe">${ic('lock', 'sm')}${m.plan.applied ? 'You approved this plan.' : m.plan.changes.length ? 'Nothing has changed yet. You approve it first.' : 'Nothing has changed.'}</div></div>`;
     }
     if (m.kind === 'booking-form') return bookingFormHtml(m);
+    if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
     if (m.kind === 'applied') {
       return `<div class="ccard"><div class="c-result">${ic('check', 'sm')} Done. ${m.count === 1 ? '1 change is' : `${m.count} changes are`} in the diary.</div><div class="sm">${esc(m.detail)}</div>
@@ -321,17 +322,128 @@ window.Copilot = (function () {
       <label class="bk-f"><span>Day</span><select data-bf="date" data-m="${m.id}">${days.map((d) => `<option value="${d.date}" ${d.date === f.date ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>
       <label class="bk-f"><span>Time</span><select data-bf="window" data-m="${m.id}">${WINDOWS.map(([v, l]) => `<option value="${v}" ${v === f.window ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       ${m.error ? `<div class="sm bk-err">${ic('alert', 'sm')}<span>${esc(m.error)}</span></div>` : ''}
-      <div class="c-acts"><button class="btn s p" data-a="bk-find" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Find a technician</button></div></div>`;
+      <div class="c-acts"><button class="btn s p" data-a="bk-next" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Next</button></div></div>`;
+  }
+
+  /* ---------- extras worth offering ---------- */
+
+  const gbp0 = (v) => `£${Math.round(v).toLocaleString('en-GB')}`;
+  const weekday = (iso) => AS.dateOf(AS.toN(iso)).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+  const picked = (x) => (x && x.ex.items ? x.ex.items.filter((i) => x.ticked.has(i.id)) : []);
+  const needsOf = (items) => items.flatMap((i) => i.parts.map((p) => ({ part: p.part, qty: p.qty })));
+
+  /** Where an item's parts come from, as one short tag. */
+  function sourceTag(item) {
+    if (item.earliest) return { text: `Earliest ${window.Matching.dayShort(item.earliest)}`, tone: 'off' };
+    const away = item.parts.find((p) => p.source !== 'shelf');
+    if (!away) return { text: 'On the shelf', tone: 'ok' };
+    return { text: away.source === 'transfer' ? `Transfer from ${away.from}, arrives ${weekday(away.arrives)}` : `Supplier, arrives ${weekday(away.arrives)}`, tone: 'amb' };
+  }
+
+  function extraRow(m, i, mode) {
+    const tags = [...i.tags.map((t) => ({ text: t, tone: t === 'Safety' ? 'safe' : '' })), mode === 'covered' ? { text: `Included in the ${m.form.type.toLowerCase()}`, tone: 'ok' } : sourceTag(i)];
+    const tagHtml = `<div class="bx-tags">${tags.map((t) => `<span class="${t.tone}">${esc(t.text)}</span>`).join('')}</div>`;
+    const body = `<div><b>${esc(i.name)}</b><div class="sm">${esc(i.reason)}</div>${tagHtml}</div>`;
+    if (mode !== 'offer' || m.done) {
+      const on = mode === 'offer' && m.ticked.has(i.id);
+      return `<div class="bx-item ${mode === 'offer' ? '' : 'off'}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true"></span>${body}<div class="bx-price">${mode === 'covered' ? '' : `${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span>`}</div></div>`;
+    }
+    const on = m.ticked.has(i.id);
+    return `<button class="bx-item" data-a="bx-tick" data-m="${m.id}" data-v="${esc(i.id)}" aria-pressed="${on}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true"></span>${body}<div class="bx-price">${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span></div></button>`;
+  }
+
+  function extrasHtml(m) {
+    const ex = m.ex;
+    const go = m.done ? '' : `<button class="btn s p" data-a="bx-find" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Find a technician</button>`;
+    if (!ex.car) return `<div class="ccard bx"><div class="sm">No history for ${esc(ex.reg || 'this car')}, so I can't suggest extras.</div>${go ? `<div class="c-acts">${go}</div>` : ''}</div>`;
+    const car = ex.car;
+    const [lastDate, lastMiles] = ex.lastVisit;
+    const head = `<div class="bx-car"><div><b>${esc(car.registered.slice(0, 4))} ${esc(car.make)} ${esc(car.model)}</b><span>Last in ${esc(window.Matching.dayShort(lastDate).split(' ').slice(1).join(' '))} ${esc(lastDate.slice(0, 4))} at ${lastMiles.toLocaleString('en-GB')} miles</span></div>
+      <label class="bx-miles"><span>${ex.estimated ? 'Estimated' : 'Mileage'}</span>${m.done ? `<b>${ex.estimated ? '~' : ''}${ex.mileage.toLocaleString('en-GB')}</b>` : `<input data-bx="mileage" data-m="${m.id}" value="${ex.mileage}" inputmode="numeric" aria-label="Current mileage">`}</label></div>`;
+    const offer = ex.items;
+    if (!offer.length && !ex.unavailable.length) {
+      return `<div class="ccard bx">${head}<div class="sm">Nothing is due or outstanding on ${esc(ex.reg)}.${ex.covered.length ? ` ${esc(ex.covered.map((i) => i.name).join(', '))} ${ex.covered.length > 1 ? 'are' : 'is'} included in the ${esc(m.form.type.toLowerCase())}.` : ''}</div>${go ? `<div class="c-acts">${go}</div>` : ''}</div>`;
+    }
+    const top = offer.slice(0, 3);
+    const rest = offer.slice(3);
+    const hidden = rest.length + ex.unavailable.length + ex.covered.length;
+    const sel = picked(m);
+    const hours = sel.reduce((a, i) => a + i.hours, 0);
+    const total = sel.length ? `${sel.length} extra${sel.length > 1 ? 's' : ''}: ${gbp0(sel.reduce((a, i) => a + i.price, 0))} inc VAT, +${hours.toFixed(1)} h` : 'No extras ticked';
+    return `<div class="ccard bx">${head}
+      ${top.map((i) => extraRow(m, i, 'offer')).join('')}
+      ${hidden ? `<button class="bx-more" data-a="bx-more" data-m="${m.id}" aria-expanded="${m.more}">${m.more ? '▴ Show less' : `▾ ${hidden} more`}</button>` : ''}
+      ${m.more ? [...rest.map((i) => extraRow(m, i, 'offer')), ...ex.unavailable.map((i) => extraRow(m, i, 'unavailable')), ...ex.covered.map((i) => extraRow(m, i, 'covered'))].join('') : ''}
+      <div class="bx-total"><span>${esc(total)}</span>${go}</div></div>`;
+  }
+
+  async function nextStep(id) {
+    const form = findMsg('booking-form', id);
+    if (!form || form.done || S.busy) return;
+    if (!form.form.type) { form.error = 'Choose the job type first.'; paint(); return; }
+    S.busy = true;
+    form.done = true;
+    const f = form.form;
+    const snap = window.Workshop.snapshot();
+    const reg = f.reg.trim().toUpperCase();
+    try {
+      await runSteps([
+        reg ? `Looking up ${reg}` : 'No registration given',
+        'Checking the service schedule and past health checks',
+        'Checking parts at Branch 1, the other branches and the supplier',
+      ]);
+      const ex = window.Upsell.extras({ reg, type: f.type, date: f.date, today: snap.today });
+      S.messages.push({ role: 'a', text: ex.car && ex.items.length ? `Here's what's worth raising with ${f.customer.trim() || 'the customer'}. The top three are ticked for you to read out.` : 'Nothing extra to offer on this one.' });
+      S.messages.push({ role: 'a', kind: 'booking-extras', id: form.id, form: Object.assign({}, f), ex, ticked: new Set((ex.items || []).filter((i) => i.ticked).map((i) => i.id)), more: false, done: false });
+    } catch (err) {
+      console.error(err);
+      form.done = false;
+      S.messages.push({ role: 'a', text: 'Something went wrong looking up the car. Nothing has been booked.' });
+    }
+    S.busy = false;
+    paint(true);
+  }
+
+  function toggleExtra(id, itemId) {
+    const m = findMsg('booking-extras', id);
+    if (!m || m.done) return;
+    if (m.ticked.has(itemId)) m.ticked.delete(itemId); else m.ticked.add(itemId);
+    paint();
+  }
+
+  function toggleMore(id) {
+    const m = findMsg('booking-extras', id);
+    if (!m) return;
+    m.more = !m.more;
+    paint();
+  }
+
+  /** A corrected mileage re-works the list, back to the default top three. */
+  function extrasMileage(id, value) {
+    const m = findMsg('booking-extras', id);
+    const miles = Number(String(value).replace(/[^\d]/g, ''));
+    if (!m || m.done || !miles) return;
+    m.ex = window.Upsell.extras({ reg: m.ex.reg, mileage: miles, type: m.form.type, date: m.form.date, today: window.Workshop.snapshot().today });
+    m.ticked = new Set(m.ex.items.filter((i) => i.ticked).map((i) => i.id));
+    paint();
   }
 
   function optionHtml(m, o, i) {
     const chips = `<div class="bk-stats">${o.stats.map((s) => `<span class="${s.tone || ''}">${esc(s.text)}</span>`).join('')}</div>`;
     const open = m.booked == null;
     if (i === 0) {
+      const first = o.tech.split(/\s+/)[0];
+      const extras = m.extras || [];
+      const parts = extras.length ? window.Parts.plan(needsOf(extras), o.date, window.Workshop.snapshot().today, `a${m.id}`) : [];
+      const ordering = parts && parts.some((c) => c.kind !== 'hold');
+      const will = open && extras.length ? `<div class="bk-will"><div class="bk-h">When you book, I'll</div>
+        <div>Add the ${(o.to - o.from).toFixed(2).replace(/\.?0+$/, '')}-hour job to ${esc(first)}'s ${esc(window.Matching.dayWord(o.date, window.Workshop.snapshot()))}</div>
+        ${parts ? parts.map((c) => `<div>${esc(window.Parts.describe(c))}</div>`).join('') : '<div class="bk-err">Some parts can no longer get here in time for this day.</div>'}</div>` : '';
       return `<div class="bk-slot">${esc(window.Matching.dayShort(o.date))}, ${hhmm(o.from)} to ${hhmm(o.to)}</div>
         <div class="bk-who">${esc(o.tech)} · ${esc(o.bay)}</div>
-        <div class="sm">${esc(o.reason)}</div>${chips}
-        ${open ? `<div class="c-acts"><button class="btn s p" data-a="bk-book" data-m="${m.id}" data-v="0">Book ${esc(o.tech.split(/\s+/)[0])}, ${esc(window.Matching.dayShort(o.date).split(' ')[0])} ${hhmm(o.from)}</button><button class="btn s" data-a="bk-preview" data-m="${m.id}" data-v="0">Preview on planner</button></div>` : ''}`;
+        ${extras.length ? `<div class="sm"><b>${esc(m.form.type)} plus ${extras.length} extra${extras.length > 1 ? 's' : ''}</b>: ${esc(extras.map((x) => x.name.toLowerCase()).join(', '))}.</div>` : ''}
+        <div class="sm">${esc(o.reason)}</div>${chips}${will}
+        ${open ? `<div class="c-acts"><button class="btn s p" data-a="bk-book" data-m="${m.id}" data-v="0">${ordering ? 'Book and order' : `Book ${esc(first)}, ${esc(window.Matching.dayShort(o.date).split(' ')[0])} ${hhmm(o.from)}`}</button><button class="btn s" data-a="bk-preview" data-m="${m.id}" data-v="0">Preview on planner</button></div>` : ''}`;
     }
     return `<div class="bk-alt"><div class="bk-alt-h"><div><b>${esc(o.label)}</b><span>${esc(o.tech)} · ${esc(window.Matching.dayShort(o.date))} ${hhmm(o.from)}</span></div>
       ${open ? `<button class="btn s" data-a="bk-book" data-m="${m.id}" data-v="${i}">Book instead</button>` : ''}</div>
@@ -362,17 +474,18 @@ window.Copilot = (function () {
   }
 
   async function findTechnician(id) {
-    const m = findMsg('booking-form', id);
+    const m = findMsg('booking-extras', id);
     if (!m || m.done || S.busy) return;
-    if (!m.form.type) { m.error = 'Choose the job type first.'; paint(); return; }
     S.busy = true;
     m.done = true;
     const f = m.form;
-    const req = { type: f.type, date: f.date, window: /^\d+$/.test(f.window) ? Number(f.window) : f.window, customer: f.customer.trim() };
+    const extras = picked(m);
+    const extraHours = extras.reduce((a, x) => a + x.hours, 0);
+    const req = { type: f.type, date: f.date, window: /^\d+$/.test(f.window) ? Number(f.window) : f.window, customer: f.customer.trim(), extraHours };
     try {
       const result = window.Matching.suggest(req, window.Workshop.snapshot());
       await runSteps(result.steps);
-      S.messages.push({ role: 'a', kind: 'booking-suggestion', id: m.id, req, form: Object.assign({}, f), result, booked: null });
+      S.messages.push({ role: 'a', kind: 'booking-suggestion', id: m.id, req, form: Object.assign({}, f), extras, result, booked: null });
     } catch (err) {
       console.error(err);
       m.done = false;
@@ -382,21 +495,27 @@ window.Copilot = (function () {
     paint(true);
   }
 
-  /** A one-change plan, so booking reuses the approve, preview and undo flow. */
+  /**
+   * A one-change plan, so booking reuses the approve, preview and undo flow. Parts for
+   * the extras ride along as partChanges; null means a part can't get here in time.
+   */
   function bookingPlan(m, idx) {
     const o = idx === 0 ? m.result.main : m.result.alts[idx - 1];
     const f = m.form;
     const type = window.Matching.typeOf(f.type);
+    const extras = m.extras || [];
+    const partChanges = extras.length ? window.Parts.plan(needsOf(extras), o.date, window.Workshop.snapshot().today, `a${m.id}`) : [];
     const change = {
       kind: 'appointment', id: `a${m.id}`, res: o.tech, bay: o.bay, from: [o.date, o.from], to: [o.date, o.to], hrs: o.to - o.from,
       l1: [f.reg.trim().toUpperCase(), f.vehicle.trim()].filter(Boolean).join(' - ') || 'New appointment',
-      l2: [type.desc, f.customer.trim()].filter(Boolean).join(' - '),
+      l2: [extras.length ? `${type.desc} + ${extras.map((x) => x.name.toLowerCase()).join(', ')}` : type.desc, f.customer.trim()].filter(Boolean).join(' - '),
     };
     const when = `${window.Matching.dayShort(o.date)} ${hhmm(o.from)}`;
+    const items = [{ on: true, changes: [change], doing: `Adding the appointment to ${o.tech.split(/\s+/)[0]}'s diary`, logText: `${change.l1} booked with ${o.tech}, ${when}, ${o.bay}` }];
+    (partChanges || []).forEach((c) => items.push({ on: true, changes: [c], doing: window.Parts.describe(c).replace(/^(\w+)/, (w) => ({ Hold: 'Holding', Request: 'Requesting', Order: 'Ordering' }[w] || w)), logText: window.Parts.describe(c) }));
     return {
-      changes: [change], booking: { id: m.id, idx },
-      items: [{ on: true, changes: [change], doing: `Adding the appointment to ${o.tech.split(/\s+/)[0]}'s diary`, logText: `${change.l1} booked with ${o.tech}, ${when}, ${o.bay}` }],
-      doneText: 'The new appointment is highlighted on the planner.',
+      changes: [change], partChanges, booking: { id: m.id, idx }, items,
+      doneText: partChanges && partChanges.length ? 'The new appointment is highlighted on the planner, and its parts are held or on their way.' : 'The new appointment is highlighted on the planner.',
     };
   }
 
@@ -412,9 +531,15 @@ window.Copilot = (function () {
     const m = findMsg('booking-suggestion', id);
     if (!m || m.booked != null || S.busy) return;
     const plan = bookingPlan(m, Number(idx));
+    const extras = findMsg('booking-extras', id);
+    if (!plan.partChanges) {
+      if (extras) { extras.done = false; extras.ex = window.Upsell.extras({ reg: extras.ex.reg, mileage: extras.ex.estimated ? null : extras.ex.mileage, type: extras.form.type, date: extras.form.date, today: window.Workshop.snapshot().today }); extras.ticked = new Set(extras.ex.items.filter((i) => i.ticked).map((i) => i.id)); }
+      S.messages.push({ role: 'a', text: "A part for one of the extras can no longer get here in time, so I haven't booked it. I've refreshed the extras above. Tick again and click **Find a technician**." });
+      paint(true);
+      return;
+    }
     if (!stillFree(plan)) {
-      const form = findMsg('booking-form', id);
-      if (form) form.done = false;
+      if (extras) extras.done = false;
       S.messages.push({ role: 'a', text: "That time has just been taken in the diary, so I haven't booked it. Click **Find a technician** again for a fresh suggestion." });
       paint(true);
       return;
@@ -468,5 +593,5 @@ window.Copilot = (function () {
     paint();
   }
 
-  return { send, setOpen, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, findTechnician, book, previewBooking };
+  return { send, setOpen, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking };
 })();

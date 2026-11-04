@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Matching scenarios</title>
+<title>Demo scenarios</title>
 <style>
   :root { --ink: #231c3e; --muted: #6a6878; --line: #e2e1e8; --ok: #256b2a; --ok-bg: #e6f3e7; --bad: #a8231b; --bad-bg: #fdecea; }
   body { margin: 0; padding: 20px 16px; font: 13px/18px system-ui, sans-serif; color: var(--ink); background: #fff; }
@@ -22,10 +22,13 @@
 <script src="../js/workshop-planner.js"></script>
 <script src="../js/optimiser.js"></script>
 <script src="../js/matching.js"></script>
+<script src="../js/parts.js"></script>
+<script src="../js/vehicles.js"></script>
+<script src="../js/upsell.js"></script>
 </head>
 <body>
-<h1>Matching scenarios</h1>
-<p>Runs each demo scenario on a fresh copy of the app, after different things have already happened in the diary.</p>
+<h1>Demo scenarios</h1>
+<p>Runs each technician matching and upsell scenario on a fresh copy of the app, after different things have already happened in the diary and the parts stock.</p>
 <div id="sum">Running…</div>
 <div class="tw"><table><thead><tr><th>Setup</th><th>Scenario</th><th>Result</th><th>Got</th></tr></thead><tbody id="rows"></tbody></table></div>
 <script>
@@ -91,12 +94,92 @@ const SETUPS = {
   'Other four, then fix': (w, name) => { SETUPS['After the other four'](w, name); SETUPS['After "Fix my workbays"'](w); },
 };
 
+/* ---------- offering extras on the booking call ---------- */
+
+const extrasFor = (w, reg, type, date) => w.Upsell.extras({ reg, type, date, today: TODAY });
+const ids = (items) => items.map((i) => i.id);
+
+/** Books the ticked extras' parts the way the copilot does: plan, then apply with the diary. */
+function bookExtras(w, reg, type, date) {
+  const ex = extrasFor(w, reg, type, date);
+  if (!ex.car) return;
+  const needs = ex.items.filter((i) => i.ticked).flatMap((i) => i.parts.map((p) => ({ part: p.part, qty: p.qty })));
+  const partChanges = w.Parts.plan(needs, date, TODAY, `u${++seq}`);
+  if (partChanges) w.Workshop.apply({ changes: [], partChanges });
+}
+
+const UPSELL_CARS = [['SC20 UYT', 'Major service', FRIDAY], ['YF70 KTO', 'Tyres', TODAY], ['GN19 HVD', 'Diagnostics', FRIDAY]];
+
+const UPSELL = {
+  'SC20 UYT, major service Friday': {
+    own: ['SC20 UYT'],
+    check(w) {
+      const ex = extrasFor(w, 'SC20 UYT', 'Major service', FRIDAY);
+      const find = (id) => ex.items.find((i) => i.id === id);
+      const top = ids(ex.items.filter((i) => i.ticked));
+      const battery = find('battery');
+      const coolant = find('coolant');
+      const tyres = ex.unavailable.find((i) => i.id === 'rear-tyres');
+      const ok = top.join() === 'brake-fluid,front-pads,battery'
+        && battery && battery.parts[0].source === 'transfer' && battery.parts[0].from === 'Branch 2'
+        && coolant && coolant.parts[0].source === 'order'
+        && tyres && tyres.earliest === '2026-11-10'
+        && ids(ex.covered).includes('air-filter');
+      return { ok, got: `Top: ${top.join(', ')}. Others: ${ids(ex.items.slice(3)).join(', ')}. Battery: ${battery && battery.parts[0].source}. Unavailable: ${ex.unavailable.map((i) => `${i.id} ${i.earliest}`).join(', ')}. Included: ${ids(ex.covered).join(', ')}` };
+    },
+  },
+  'YF70 KTO, tyres today': {
+    own: ['YF70 KTO'],
+    check(w) {
+      const ex = extrasFor(w, 'YF70 KTO', 'Tyres', TODAY);
+      const ok = ex.items.length > 0 && ex.items.every((i) => i.parts.every((p) => p.source === 'shelf')) && !ex.unavailable.length;
+      return { ok, got: ex.items.map((i) => `${i.id} (${i.parts.map((p) => p.source).join('/') || 'labour'})`).join(', ') };
+    },
+  },
+  'Same last part': {
+    own: ['GN19 HVD', 'WR69 NMC'],
+    check(w) {
+      bookExtras(w, 'GN19 HVD', 'Diagnostics', FRIDAY);
+      const ex = extrasFor(w, 'WR69 NMC', 'Diagnostics', FRIDAY);
+      const discs = ex.unavailable.find((i) => i.id === 'rear-discs');
+      return { ok: !!discs && discs.earliest === '2026-11-09' && !ex.items.some((i) => i.id === 'rear-discs'), got: discs ? `Rear discs greyed, earliest ${discs.earliest}` : `Offered: ${ids(ex.items).join(', ')}` };
+    },
+  },
+  'Nothing due': {
+    own: [],
+    check(w) {
+      const ex = extrasFor(w, 'KY72 BLN', 'Major service', FRIDAY);
+      return { ok: !!ex.car && !ex.items.length && !ex.unavailable.length, got: `${ex.items.length} offered, ${ex.unavailable.length} greyed` };
+    },
+  },
+  'Unknown car': {
+    own: [],
+    check(w) {
+      const ex = extrasFor(w, 'AB12 CDE', 'Brakes', FRIDAY);
+      return { ok: ex.car === null, got: ex.car ? 'Found a car' : 'No history' };
+    },
+  },
+};
+
+const UPSELL_SETUPS = {
+  'Fresh load': () => {},
+  'After "Fix my workbays"': (w) => w.Workshop.apply(w.Optimiser.create('all')),
+  'After the other upsell bookings': (w, name) => UPSELL_CARS.filter(([reg]) => !UPSELL[name].own.includes(reg)).forEach(([reg, type, date]) => bookExtras(w, reg, type, date)),
+  'After a booking and undo': (w, name) => { UPSELL_CARS.filter(([reg]) => UPSELL[name].own.includes(reg)).forEach(([reg, type, date]) => bookExtras(w, reg, type, date)); w.Workshop.undo(); },
+  'Fix, then the other bookings': (w, name) => { UPSELL_SETUPS['After "Fix my workbays"'](w); UPSELL_SETUPS['After the other upsell bookings'](w, name); },
+};
+
+const GROUPS = [
+  [SETUPS, Object.fromEntries(Object.entries(SCENARIOS).map(([n, check]) => [n, check]))],
+  [UPSELL_SETUPS, Object.fromEntries(Object.entries(UPSELL).map(([n, s]) => [n, s.check]))],
+];
+
 async function run() {
   const rows = document.getElementById('rows');
   let pass = 0;
   let total = 0;
-  for (const [setup, prep] of Object.entries(SETUPS)) {
-    for (const [name, check] of Object.entries(SCENARIOS)) {
+  for (const [setups, scenarios] of GROUPS) for (const [setup, prep] of Object.entries(setups)) {
+    for (const [name, check] of Object.entries(scenarios)) {
       const f = await fresh();
       const w = f.contentWindow;
       let res;

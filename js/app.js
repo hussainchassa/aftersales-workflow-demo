@@ -168,7 +168,10 @@ window.App = (function () {
     },
     'df-clear': () => window.Copilot.applyFilter('clear'),
     'bk-type': (el) => window.Copilot.bookingType(el.dataset.m, el.dataset.v),
-    'bk-find': (el) => window.Copilot.findTechnician(el.dataset.m),
+    'bk-next': (el) => window.Copilot.nextStep(el.dataset.m),
+    'bx-tick': (el) => window.Copilot.toggleExtra(el.dataset.m, el.dataset.v),
+    'bx-more': (el) => window.Copilot.toggleMore(el.dataset.m),
+    'bx-find': (el) => window.Copilot.findTechnician(el.dataset.m),
     'bk-book': (el) => window.Copilot.book(el.dataset.m, el.dataset.v),
     'bk-preview': (el) => window.Copilot.previewBooking(el.dataset.m, el.dataset.v),
   };
@@ -192,6 +195,8 @@ window.App = (function () {
     if (name) window.Copilot.applyFilter(name, e.target.value);
     const item = e.target.dataset && e.target.dataset.pi;
     if (item) window.Optimiser.toggle(main, window.Copilot.plan(), item, e.target.checked);
+    // Mileage is applied when the advisor leaves the field, so typing isn't interrupted.
+    if (e.target.dataset && e.target.dataset.bx === 'mileage') window.Copilot.extrasMileage(e.target.dataset.m, e.target.value);
   });
 
   document.getElementById('nav-filter').addEventListener('input', (e) => {
