@@ -247,7 +247,7 @@ window.Workshop = (function () {
     const start = n(state.from);
     const days = Math.max(1, n(state.to) - start + 1);
     const h = state.scale * PX_PER_SCALE;
-    const banner = state.preview ? `<div class="pl-banner"><svg class="i sm"><use href="#i-sparks"/></svg><span><b>Preview.</b> ${state.preview.count} changes shown with dashed outlines. Nothing is saved yet.</span><span class="sp"></span><button class="btn s" data-a="plan-back">Back to plan</button><button class="btn s p" data-a="plan-apply">Apply ${state.preview.count} changes</button></div>` : '';
+    const banner = state.preview ? `<div class="pl-banner"><svg class="i sm"><use href="#i-sparks"/></svg><span><b>Preview.</b> ${state.preview.count} change${state.preview.count === 1 ? '' : 's'} shown with dashed outlines. Nothing is saved yet.</span><span class="sp"></span><button class="btn s" data-a="plan-back">Back</button><button class="btn s p" data-a="plan-apply">Apply ${state.preview.count} change${state.preview.count === 1 ? '' : 's'}</button></div>` : '';
     mount.innerHTML = `<div class="planner">${banner}
       <div class="pl-toolbar">
         <input type="date" id="pl-from" aria-label="From date" value="${state.from}">

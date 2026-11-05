@@ -28,6 +28,8 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
 
   Only extras whose parts can be in Branch 1 by the end of the working day before the appointment are offered, whether from the shelf, a transfer from another branch, or the supplier. The top three are ticked, and the job gets longer to fit them. One "Book and order" confirmation holds the parts and places any transfers or orders, and undo reverses the lot.
 
+In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
+
 To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`.
 
 ### Booking scenarios
@@ -82,7 +84,8 @@ Open `tests/scenarios.html` to check the matching and extras scenarios still beh
 | `js/upsell.js` | Works out the extras worth offering for a car and appointment day, in the order to raise them |
 | `tests/scenarios.html` | Runs the matching and extras scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
-| `js/copilot.js` | The chat panel |
+| `js/copilot.js` | The chat panel, which updates in place so focus and animations carry through |
+| `css/chat.css` | The chat panel's styling and motion |
 | `js/workshop-planner.js` | The planner screen |
 | `js/app.js` | Navigation and view switching |
 

@@ -14,15 +14,17 @@ window.Copilot = (function () {
   const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   const wait = (ms) => new Promise((r) => setTimeout(r, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : ms));
 
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const S = { open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null };
 
   const STARTERS = [
-    'Book an appointment',
-    'How is my aftersales performing?',
-    'Which technicians are under-utilised?',
-    'Where am I losing money?',
-    'Compare my branches',
-    "What's coming up in the planner?",
+    ['Book an appointment', 'calendar'],
+    ['How is my aftersales performing?', 'chart'],
+    ['Which technicians are under-utilised?', 'user'],
+    ['Where am I losing money?', 'report'],
+    ['Compare my branches', 'table'],
+    ["What's coming up in the planner?", 'clock'],
   ];
 
   /**
@@ -37,87 +39,307 @@ window.Copilot = (function () {
   const body = () => document.getElementById('chat-b');
 
   function emptyHtml() {
-    return `<div class="c-empty"><h2>Morning. What do you want to know?</h2>
-      <div class="c-chips">${STARTERS.map((q) => `<button class="qchip" data-a="ask" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+    const hour = new Date().getHours();
+    const c = window.Workshop.capacity();
+    const jobs = c.unallocatedToday === 1 ? '1 unallocated job' : `${c.unallocatedToday} unallocated jobs`;
+    const away = c.absentToday.length === 1 ? '1 technician' : `${c.absentToday.length} technicians`;
+    return `<div class="c-empty"><h2><span>Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}.</span></h2>
+      <p class="c-today">You have ${jobs} due today and ${away} away. What do you need?</p>
+      <div class="c-starts">${STARTERS.map(([q, icon], i) => `<button class="c-start" style="--i:${i}" data-a="ask" data-v="${esc(q)}"><span class="c-start-i">${ic(icon, 'sm')}</span><span>${esc(q)}</span>${ic('arrow', 'sm')}</button>`).join('')}</div>
       <p class="c-safe">${ic('lock', 'sm')}<span>I can read workshop data, build dashboards and plan improvements. The diary only changes when you approve a plan, and you can undo it. I can't post anything.</span></p></div>`;
+  }
+
+  /** Suggestions only make sense as a next step, so only the latest message keeps them. */
+  function chipsHtml(m) {
+    if (!m.chips || !m.chips.length || S.messages[S.messages.length - 1] !== m) return '';
+    return `<div class="c-chips">${m.chips.map((q, i) => `<button class="qchip" style="--i:${i}" data-a="ask" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
   }
 
   function msgHtml(m) {
     if (m.role === 'u') return `<div class="msg-u">${esc(m.text)}</div>`;
-    if (m.role === 'typing') return '<div class="msg-a"><span class="typing"><i></i><i></i><i></i></span></div>';
+    if (m.role === 'typing') return '<div class="thinking"><span class="orb"></span><span class="shim">Thinking</span></div>';
     if (m.kind === 'steps') {
-      return `<div class="ccard steps" aria-live="polite">${m.steps.map((st, i) => {
-        const state = i < m.at ? 'done' : i === m.at && !m.finished ? 'run' : m.finished ? 'done' : 'todo';
-        return `<div class="step ${state}">${state === 'done' ? ic('check', 'sm') : state === 'run' ? '<span class="spin"></span>' : '<span class="dot"></span>'}<span>${esc(st)}</span></div>`;
-      }).join('')}</div>`;
+      const count = m.steps.length;
+      return `<div class="steps ${m.finished ? 'fin' : ''} ${m.open ? 'open' : ''}">
+        <button class="steps-h" data-a="chat-steps" data-m="${m.key}" aria-expanded="${!!m.open}">${ic('check', 'sm')}<span>Worked through ${count} step${count === 1 ? '' : 's'}</span>${ic('down', 'chev')}</button>
+        <div class="steps-w"><div class="steps-l">${m.steps.map((st, i) => {
+          const state = i < m.at ? 'done' : i === m.at && !m.finished ? 'run' : m.finished ? 'done' : 'todo';
+          return `<div class="step ${state}">${state === 'done' ? ic('check', 'sm') : state === 'run' ? '<span class="spin"></span>' : '<span></span>'}<span>${esc(st)}</span></div>`;
+        }).join('')}</div></div></div>`;
     }
     if (m.kind === 'plan') {
       const live = S.plan === m.plan && !m.plan.applied;
       return `<div class="ccard"><div class="c-result">${esc(m.plan.summary)}</div>
         <div class="kv3">${m.plan.stats.map((x) => `<div><span class="xs muted">${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join('')}</div>
-        ${live && m.plan.changes.length ? `<div class="c-acts"><button class="btn s p" data-a="plan-apply">Apply ${m.plan.changes.length} changes</button><button class="btn s" data-a="plan-preview">Preview on planner</button></div>` : ''}
+        ${live && m.plan.changes.length ? `<div class="c-acts"><button class="btn s p" data-a="plan-apply">Apply ${m.plan.changes.length} change${m.plan.changes.length === 1 ? '' : 's'}</button><button class="btn s" data-a="plan-preview">Preview on planner</button></div>` : ''}
         <div class="safe">${ic('lock', 'sm')}${m.plan.applied ? 'You approved this plan.' : m.plan.changes.length ? 'Nothing has changed yet. You approve it first.' : 'Nothing has changed.'}</div></div>`;
     }
     if (m.kind === 'booking-form') return bookingFormHtml(m);
     if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
     if (m.kind === 'applied') {
-      return `<div class="ccard"><div class="c-result">${ic('check', 'sm')} Done. ${m.count === 1 ? '1 change is' : `${m.count} changes are`} in the diary.</div><div class="sm">${esc(m.detail)}</div>
+      return `<div class="ccard ${m.undone ? '' : 'is-done'}"><div class="c-result">${m.undone ? '' : `<span class="done-tick">${ic('check', 'sm')}</span>`}${m.undone ? 'Reversed.' : 'Done.'} ${m.count === 1 ? '1 change is' : `${m.count} changes are`} ${m.undone ? 'out of' : 'in'} the diary.</div>${m.undone ? '' : `<div class="sm">${esc(m.detail)}</div>`}
         <ul class="c-log">${m.log.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-        ${m.undone ? '<div class="sm muted">Undone.</div>' : `<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button><button class="btn s" data-a="go-dash">Back to the dashboard</button></div>`}
+        ${m.undone ? '' : `<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button><button class="btn s" data-a="go-dash">Back to the dashboard</button></div>`}
         <div class="safe">${ic('info', 'sm')}Approved by you at 09:42. Sample diary, so nothing leaves this demo.</div></div>`;
     }
     if (m.kind === 'result') {
       const showing = m.seq === S.resultSeq && window.App.view() === 'dashboard';
-      return `<div class="ccard">
-        <div class="c-result">${esc(m.title)}</div>
+      return `<div class="ans">
+        <div class="c-result" data-stream>${esc(m.title)}</div>
         ${m.detail ? `<div class="sm">${esc(m.detail)}</div>` : ''}
         ${m.stats.length ? `<div class="kv3">${m.stats.map((x) => `<div><span class="xs muted">${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join('')}</div>` : ''}
         ${m.notes.map((n) => `<div class="sm c-note">${ic('info', 'sm')}<span>${esc(n)}</span></div>`).join('')}
-        ${showing ? '' : `<button class="btn s p" data-a="reopen" data-v="${m.seq}" style="align-self:flex-start">View this dashboard</button>`}
-        <div class="safe">${ic('lock', 'sm')}Sample data. Nothing has changed.</div>
-      </div>${m.chips.length ? `<div class="c-chips">${m.chips.map((q) => `<button class="qchip" data-a="ask" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>` : ''}`;
+        ${showing ? '' : `<button class="btn s p" data-a="reopen" data-v="${m.seq}">View this dashboard</button>`}
+      </div>${chipsHtml(m)}`;
     }
-    return `<div class="msg-a col"><span>${rich(m.text)}</span>${m.planner ? `<button class="lnk" data-a="go-planner"><span>Open the Technician planner</span>${ic('right', 'sm')}</button>` : ''}${m.chips && m.chips.length ? `<div class="c-chips">${m.chips.map((q) => `<button class="qchip" data-a="ask" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>` : ''}</div>`;
+    return `<div class="msg-a col"><span data-stream>${rich(m.text)}</span>${m.planner ? `<button class="lnk" data-a="go-planner"><span>Open the Technician planner</span>${ic('right', 'sm')}</button>` : ''}${chipsHtml(m)}</div>`;
   }
 
+  /* ---------- painting: only what changed, in place, so transitions and focus survive ---------- */
+
+  const EMPTY = { role: 'empty' };
+  const rows = new Map();
+  let keySeq = 0;
+  let stick = true;
+  let settleTimer = null;
+
+  const parse = (html) => { const t = document.createElement('template'); t.innerHTML = html; return t.content; };
+
+  function popIn(node) {
+    if (node.nodeType === 1 && !(node instanceof SVGElement)) {
+      node.classList.add('pop');
+      setTimeout(() => node.classList.remove('pop'), 320);
+    }
+    return node;
+  }
+
+  function morphChildren(from, to) {
+    const next = [...to.childNodes];
+    next.forEach((n, i) => {
+      const cur = from.childNodes[i];
+      if (!cur) from.appendChild(popIn(n));
+      else if (cur.nodeType !== n.nodeType || cur.nodeName !== n.nodeName) cur.replaceWith(popIn(n));
+      else if (n.nodeType === 1) morphElement(cur, n);
+      else if (cur.nodeValue !== n.nodeValue) cur.nodeValue = n.nodeValue;
+    });
+    while (from.childNodes.length > next.length) from.lastChild.remove();
+  }
+
+  function morphElement(a, b) {
+    [...a.attributes].forEach((x) => { if (!b.hasAttribute(x.name)) a.removeAttribute(x.name); });
+    [...b.attributes].forEach((x) => { if (a.getAttribute(x.name) !== x.value) a.setAttribute(x.name, x.value); });
+    morphChildren(a, b);
+    if (a.tagName === 'INPUT' && a !== document.activeElement) a.value = b.getAttribute('value') || '';
+    if (a.tagName === 'SELECT') a.value = b.value;
+  }
+
+  /** Answers fade in word by word, then go back to plain text so a re-show can't replay them. */
+  function streamIn(el) {
+    if (reduced()) return;
+    el.querySelectorAll('[data-stream]').forEach((node) => {
+      const plain = node.innerHTML;
+      let i = 0;
+      const walk = (parent) => [...parent.childNodes].forEach((c) => {
+        if (c.nodeType !== 3) { walk(c); return; }
+        const f = document.createDocumentFragment();
+        c.nodeValue.split(/(\s+)/).forEach((w) => {
+          if (!w) return;
+          if (!w.trim()) { f.append(w); return; }
+          const span = document.createElement('span');
+          span.className = 'w-in';
+          span.style.animationDelay = `${Math.min(i++ * 22, 700)}ms`;
+          span.textContent = w;
+          f.append(span);
+        });
+        c.replaceWith(f);
+      });
+      walk(node);
+      setTimeout(() => { if (node.isConnected) node.innerHTML = plain; }, 1300);
+    });
+  }
+
+  function newRow(html) {
+    const el = document.createElement('div');
+    el.className = 'msg enter';
+    el.innerHTML = html;
+    streamIn(el);
+    setTimeout(() => el.classList.remove('enter'), 1300);
+    return el;
+  }
+
+  function syncScroll() {
+    const b = body();
+    const dist = b.scrollHeight - b.scrollTop - b.clientHeight;
+    if (dist < 48) stick = true;
+    root().querySelector('.chat-h').classList.toggle('scrolled', b.scrollTop > 4);
+    root().querySelector('.chat-jump').classList.toggle('on', dist > 140);
+  }
+
+  /** Follow the conversation, but start a card taller than the panel at its top so it reads from the start. */
+  function settle(behavior) {
+    const b = body();
+    const last = b && b.lastElementChild;
+    if (!last || !stick) return;
+    const tall = last.offsetHeight > b.clientHeight - 32;
+    b.scrollTo({ top: tall ? last.offsetTop - 14 : b.scrollHeight, behavior: reduced() ? 'auto' : behavior });
+  }
+
+  /** scroll: true follows the conversation, 'instant' jumps there without animating. */
   function paint(scroll) {
     const b = body();
     if (!b) return;
-    const near = b.scrollHeight - b.scrollTop - b.clientHeight < 60;
-    b.innerHTML = S.messages.length ? S.messages.map(msgHtml).join('') : emptyHtml();
-    if (scroll || near) b.scrollTop = b.scrollHeight;
-    const send = root().querySelector('.send');
-    if (send) send.disabled = S.busy;
+    const items = S.messages.length ? S.messages : [EMPTY];
+    const live = new Set();
+    let prev = null;
+    let added = false;
+    items.forEach((m) => {
+      if (!m.key) m.key = ++keySeq;
+      live.add(m.key);
+      const html = m === EMPTY ? emptyHtml() : msgHtml(m);
+      let el = rows.get(m.key);
+      if (!el) {
+        el = newRow(html);
+        rows.set(m.key, el);
+        added = true;
+      } else if (el.rendered !== html) {
+        morphChildren(el, parse(html));
+      }
+      el.rendered = html;
+      const slot = prev ? prev.nextSibling : b.firstChild;
+      if (slot !== el) b.insertBefore(el, slot);
+      prev = el;
+    });
+    rows.forEach((el, key) => { if (!live.has(key)) { el.remove(); rows.delete(key); } });
+
+    const r = root();
+    r.classList.toggle('busy', S.busy);
+    const q = r.querySelector('#chat-q');
+    r.querySelector('.send').disabled = S.busy || !q.value.trim();
+    r.querySelector('[data-a="chat-new"]').classList.toggle('hide', !S.messages.length);
+    r.querySelector('.chat-fine').classList.toggle('gone', !S.messages.length);
+
+    if (scroll || added) {
+      const behavior = scroll === 'instant' ? 'auto' : 'smooth';
+      settle(behavior);
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => settle(behavior), 320);
+    }
+    syncScroll();
+  }
+
+  function jump() {
+    stick = true;
+    const b = body();
+    b.scrollTo({ top: b.scrollHeight, behavior: reduced() ? 'auto' : 'smooth' });
+  }
+
+  /** Moves the keyboard to the next obvious action, without pulling the panel around. */
+  function focusAction(selector) {
+    const el = root().querySelector(selector);
+    if (el) el.focus({ preventScroll: true });
+  }
+
+  function placeholderText() {
+    const view = window.App.view();
+    if (view === 'dashboard') return 'Ask a follow-up, like "Just Branch 2"';
+    if (view === 'plan') return 'Say "do it" to approve, or ask something else';
+    return 'Ask anything, or book an appointment';
+  }
+
+  function fitComposer(q) {
+    q.style.height = 'auto';
+    q.style.height = `${Math.min(q.scrollHeight, 118)}px`;
+    root().querySelector('.send').disabled = S.busy || !q.value.trim();
+  }
+
+  /** Up and down step through what you've already asked, like a terminal. */
+  let recall = 0;
+  function recallQuestion(q, step) {
+    const asked = S.messages.filter((m) => m.role === 'u').map((m) => m.text);
+    const next = recall + step;
+    if (next < 0 || next > asked.length) return false;
+    recall = next;
+    q.value = recall ? asked[asked.length - recall] : '';
+    fitComposer(q);
+    return true;
   }
 
   function mount() {
     const ctx = window.App.view() === 'dashboard' ? 'Dashboard' : 'Technician planner';
-    root().innerHTML = `<div class="chat-h"><div class="spark">${ic('spark', 'sm')}</div><b>AI Assistance</b><span class="ctx" id="chat-ctx">${esc(ctx)}</span><span class="sp"></span><button class="icbtn" data-a="chat" aria-label="Close AI Assistance">${ic('x')}</button></div>
+    root().innerHTML = `<div class="chat-h"><div class="spark">${ic('spark', 'sm')}</div><b>AI Assistance</b><span class="ctx" id="chat-ctx">${esc(ctx)}</span><span class="sp"></span><button class="icbtn hide" data-a="chat-new" aria-label="New conversation" title="New conversation">${ic('new', 'sm')}</button><button class="icbtn" data-a="chat" aria-label="Close AI Assistance" title="Close">${ic('x', 'sm')}</button></div>
       <div class="chat-b" id="chat-b" aria-live="polite"></div>
-      <form class="chat-f" id="chat-f"><input name="q" placeholder="Ask about your aftersales" autocomplete="off" aria-label="Message"><button class="btn sq p send" aria-label="Send">${ic('send', 'sm')}</button></form>`;
-    root().querySelector('#chat-f').addEventListener('submit', (e) => {
+      <form class="chat-f" id="chat-f"><button type="button" class="chat-jump" data-a="chat-jump" tabindex="-1">${ic('dn', 'sm')}Latest</button>
+        <div class="cmp"><textarea id="chat-q" name="q" rows="1" placeholder="${esc(placeholderText())}" autocomplete="off" aria-label="Message"></textarea><button class="send" aria-label="Send" title="Send" disabled>${ic('up')}</button></div>
+        <p class="chat-fine">Sample data. The diary only changes when you approve.</p></form>`;
+    const form = root().querySelector('#chat-f');
+    const q = form.querySelector('#chat-q');
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const input = e.target.q;
-      const q = input.value.trim();
-      if (!q || S.busy) return;
-      input.value = '';
-      send(q);
+      const text = q.value.trim();
+      if (!text || S.busy) return;
+      q.value = '';
+      recall = 0;
+      fitComposer(q);
+      send(text);
     });
-    paint(true);
+    q.addEventListener('input', () => { recall = 0; fitComposer(q); });
+    q.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); return; }
+      if (e.key === 'ArrowUp' && (!q.value || recall) && recallQuestion(q, 1)) e.preventDefault();
+      if (e.key === 'ArrowDown' && recall && recallQuestion(q, -1)) e.preventDefault();
+    });
+    const b = body();
+    b.addEventListener('scroll', syncScroll, { passive: true });
+    b.addEventListener('wheel', (e) => { if (e.deltaY < 0) stick = false; }, { passive: true });
+    b.addEventListener('touchmove', () => { stick = false; }, { passive: true });
+    // Enter moves the booking on, and confirms a corrected mileage.
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      e.preventDefault();
+      if (e.target.dataset.bf) nextStep(e.target.dataset.m);
+      if (e.target.dataset.bx) e.target.blur();
+    });
+    paint('instant');
   }
 
   function setOpen(open) {
     S.open = open;
     const c = root();
-    c.classList.toggle('hide', !open);
     const btn = document.getElementById('ai-btn');
     btn.setAttribute('aria-pressed', String(open));
     if (open) {
+      c.classList.remove('hide', 'closing');
       if (!c.firstChild) mount();
-      paint(true);
-      c.querySelector('input').focus();
+      paint('instant');
+      c.querySelector('#chat-q').focus();
+      return;
     }
+    if (c.contains(document.activeElement)) btn.focus({ preventScroll: true });
+    c.classList.add('closing');
+    setTimeout(() => {
+      c.classList.remove('closing');
+      if (!S.open) c.classList.add('hide');
+    }, reduced() ? 0 : 190);
+  }
+
+  function newChat() {
+    if (S.busy) return;
+    window.Workshop.clearPreview();
+    S.messages = [];
+    S.plan = null;
+    stick = true;
+    recall = 0;
+    if (window.App.view() === 'dashboard') paint('instant');
+    else window.App.showPlanner();
+    root().querySelector('#chat-q').focus();
+  }
+
+  function toggleSteps(key) {
+    const m = S.messages.find((x) => x.key === Number(key));
+    if (!m) return;
+    m.open = !m.open;
+    paint();
   }
 
   const steppers = {
@@ -140,8 +362,10 @@ window.Copilot = (function () {
   async function send(question) {
     if (S.busy) return;
     S.busy = true;
+    stick = true;
     if (!S.open) setOpen(true);
     S.messages.push({ role: 'u', text: question });
+    let kind = null;
     const typing = { role: 'typing' };
     S.messages.push(typing);
     paint(true);
@@ -149,6 +373,7 @@ window.Copilot = (function () {
 
     try {
       const result = await plan(question, S.state);
+      kind = result.kind;
       S.messages.splice(S.messages.indexOf(typing), 1);
       if (result.kind === 'reply') {
         S.messages.push({ role: 'a', text: result.text, chips: result.chips, planner: result.planner });
@@ -175,8 +400,8 @@ window.Copilot = (function () {
     }
     S.busy = false;
     paint(true);
-    const input = root().querySelector('input');
-    if (input && document.activeElement === document.body) input.focus();
+    if (kind === 'book') focusAction('[data-bf="customer"]');
+    else if (document.activeElement === document.body) root().querySelector('#chat-q').focus();
   }
 
   async function buildDashboard(result) {
@@ -242,7 +467,13 @@ window.Copilot = (function () {
     if (!plan || plan.applied || !plan.changes.length) return;
     const wasBusy = S.busy;
     S.busy = true;
+    stick = true;
     plan.applied = true;
+    if (plan.booking) {
+      // Applying from the planner's preview banner books it just as the chat's button does.
+      const suggestion = findMsg('booking-suggestion', plan.booking.id);
+      if (suggestion) suggestion.booked = plan.booking.idx;
+    }
     window.Workshop.clearPreview();
     await runSteps(plan.items.filter((i) => i.on && i.changes.length).map((i) => `${i.doing}`));
     window.Workshop.apply(plan);
@@ -308,21 +539,27 @@ window.Copilot = (function () {
     if (m.done) {
       const day = bookingDays(window.Workshop.snapshot()).find((d) => d.date === f.date);
       return `<div class="ccard bk"><div class="bk-h">New appointment</div>
-        <div class="sm"><b>${esc(f.type)}</b> for ${esc(f.customer || 'the customer')}${f.reg ? `, ${esc(f.reg)}` : ''}${f.vehicle ? ` ${esc(f.vehicle)}` : ''}</div>
+        <div class="sm bk-sum"><b>${esc(f.type)}</b> for ${esc(f.customer || 'the customer')}${f.reg ? `<span class="plate">${esc(f.reg.trim().toUpperCase())}</span>` : ''}${f.vehicle ? `<span>${esc(f.vehicle)}</span>` : ''}</div>
         <div class="sm muted">${esc(day ? day.label : f.date)}, ${esc(WINDOWS.find((w) => w[0] === f.window)[1].toLowerCase())}${f.phone ? ` · ${esc(f.phone)}` : ''}</div></div>`;
     }
-    const field = (name, label, ph) => `<label class="bk-f"><span>${label}</span><input data-bf="${name}" data-m="${m.id}" value="${esc(f[name])}" placeholder="${ph}" autocomplete="off"></label>`;
+    const field = (name, label, ph, cls) => `<label class="bk-f"><span>${label}</span><input ${cls ? `class="${cls}"` : ''} data-bf="${name}" data-m="${m.id}" value="${esc(f[name])}" placeholder="${ph}" autocomplete="off"></label>`;
     const days = bookingDays(window.Workshop.snapshot());
+    const car = m.car;
     return `<div class="ccard bk"><div class="bk-h">New appointment</div>
-      ${field('customer', 'Customer', 'Name')}
-      ${field('phone', 'Phone', 'Number')}
-      ${field('reg', 'Registration', 'e.g. SC20 UYT')}
-      ${field('vehicle', 'Make and model', 'e.g. Jaguar E-Pace')}
+      <div class="bk-grid">
+        ${field('customer', 'Customer', 'Name')}
+        ${field('phone', 'Phone', 'Number')}
+        ${field('reg', 'Registration', 'e.g. SC20 UYT', 'plate-in')}
+        ${field('vehicle', 'Make and model', 'e.g. Jaguar E-Pace')}
+      </div>
+      <div class="fold ${car ? 'on' : ''}"><div><div class="bk-match">${ic('check', 'sm')}<span>${car ? `${esc(car.registered.slice(0, 4))} ${esc(car.make)} ${esc(car.model)}, history found` : ''}</span></div></div></div>
       <div class="bk-f"><span>Job</span><div class="bk-types" role="group" aria-label="Job type">${window.Matching.TYPES.map((t) => `<button class="qchip" data-a="bk-type" data-m="${m.id}" data-v="${esc(t.id)}" aria-pressed="${f.type === t.id}">${esc(t.id)}</button>`).join('')}</div></div>
-      <label class="bk-f"><span>Day</span><select data-bf="date" data-m="${m.id}">${days.map((d) => `<option value="${d.date}" ${d.date === f.date ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>
-      <label class="bk-f"><span>Time</span><select data-bf="window" data-m="${m.id}">${WINDOWS.map(([v, l]) => `<option value="${v}" ${v === f.window ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-      ${m.error ? `<div class="sm bk-err">${ic('alert', 'sm')}<span>${esc(m.error)}</span></div>` : ''}
-      <div class="c-acts"><button class="btn s p" data-a="bk-next" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Next</button></div></div>`;
+      <div class="fold ${m.error ? 'on' : ''}"><div><div class="sm bk-err">${ic('alert', 'sm')}<span>${esc(m.error)}</span></div></div></div>
+      <div class="bk-grid">
+        <label class="bk-f"><span>Day</span><select data-bf="date" data-m="${m.id}">${days.map((d) => `<option value="${d.date}" ${d.date === f.date ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>
+        <label class="bk-f"><span>Time</span><select data-bf="window" data-m="${m.id}">${WINDOWS.map(([v, l]) => `<option value="${v}" ${v === f.window ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      </div>
+      <div class="c-acts"><button class="btn s p" data-a="bk-next" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Next ${ic('arrow', 'sm')}</button></div></div>`;
   }
 
   /* ---------- extras worth offering ---------- */
@@ -346,15 +583,15 @@ window.Copilot = (function () {
     const body = `<div><b>${esc(i.name)}</b><div class="sm">${esc(i.reason)}</div>${tagHtml}</div>`;
     if (mode !== 'offer' || m.done) {
       const on = mode === 'offer' && m.ticked.has(i.id);
-      return `<div class="bx-item ${mode === 'offer' ? '' : 'off'}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true"></span>${body}<div class="bx-price">${mode === 'covered' ? '' : `${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span>`}</div></div>`;
+      return `<div class="bx-item ${mode === 'offer' ? '' : 'off'}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true">${ic('check')}</span>${body}<div class="bx-price">${mode === 'covered' ? '' : `${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span>`}</div></div>`;
     }
     const on = m.ticked.has(i.id);
-    return `<button class="bx-item" data-a="bx-tick" data-m="${m.id}" data-v="${esc(i.id)}" aria-pressed="${on}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true"></span>${body}<div class="bx-price">${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span></div></button>`;
+    return `<button class="bx-item" data-a="bx-tick" data-m="${m.id}" data-v="${esc(i.id)}" aria-pressed="${on}"><span class="bx-box ${on ? 'on' : ''}" aria-hidden="true">${ic('check')}</span>${body}<div class="bx-price">${gbp0(i.price)}<span>+${i.hours.toFixed(1)} h</span></div></button>`;
   }
 
   function extrasHtml(m) {
     const ex = m.ex;
-    const go = m.done ? '' : `<button class="btn s p" data-a="bx-find" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Find a technician</button>`;
+    const go = m.done ? '' : `<button class="btn s p" data-a="bx-find" data-m="${m.id}" ${S.busy ? 'disabled' : ''}>Find a technician ${ic('arrow', 'sm')}</button>`;
     if (!ex.car) return `<div class="ccard bx"><div class="sm">No history for ${esc(ex.reg || 'this car')}, so I can't suggest extras.</div>${go ? `<div class="c-acts">${go}</div>` : ''}</div>`;
     const car = ex.car;
     const [lastDate, lastMiles] = ex.lastVisit;
@@ -369,12 +606,12 @@ window.Copilot = (function () {
     const hidden = rest.length + ex.unavailable.length + ex.covered.length;
     const sel = picked(m);
     const hours = sel.reduce((a, i) => a + i.hours, 0);
-    const total = sel.length ? `${sel.length} extra${sel.length > 1 ? 's' : ''}: ${gbp0(sel.reduce((a, i) => a + i.price, 0))} inc VAT, +${hours.toFixed(1)} h` : 'No extras ticked';
+    const total = sel.length ? `<b>${sel.length} extra${sel.length > 1 ? 's' : ''}, ${gbp0(sel.reduce((x, i) => x + i.price, 0))}</b><small>inc VAT, +${hours.toFixed(1)} h</small>` : '<b>No extras ticked</b>';
     return `<div class="ccard bx">${head}
       ${top.map((i) => extraRow(m, i, 'offer')).join('')}
-      ${hidden ? `<button class="bx-more" data-a="bx-more" data-m="${m.id}" aria-expanded="${m.more}">${m.more ? '▴ Show less' : `▾ ${hidden} more`}</button>` : ''}
+      ${hidden ? `<button class="bx-more" data-a="bx-more" data-m="${m.id}" aria-expanded="${m.more}">${ic('down', 'sm')}<span>${m.more ? 'Show less' : `${hidden} more`}</span></button>` : ''}
       ${m.more ? [...rest.map((i) => extraRow(m, i, 'offer')), ...ex.unavailable.map((i) => extraRow(m, i, 'unavailable')), ...ex.covered.map((i) => extraRow(m, i, 'covered'))].join('') : ''}
-      <div class="bx-total"><span>${esc(total)}</span>${go}</div></div>`;
+      <div class="bx-total"><div>${total}</div>${go}</div></div>`;
   }
 
   async function nextStep(id) {
@@ -382,6 +619,7 @@ window.Copilot = (function () {
     if (!form || form.done || S.busy) return;
     if (!form.form.type) { form.error = 'Choose the job type first.'; paint(); return; }
     S.busy = true;
+    stick = true;
     form.done = true;
     const f = form.form;
     const snap = window.Workshop.snapshot();
@@ -402,6 +640,7 @@ window.Copilot = (function () {
     }
     S.busy = false;
     paint(true);
+    focusAction('[data-a="bx-find"]');
   }
 
   function toggleExtra(id, itemId) {
@@ -439,7 +678,7 @@ window.Copilot = (function () {
       const will = open && extras.length ? `<div class="bk-will"><div class="bk-h">When you book, I'll</div>
         <div>Add the ${(o.to - o.from).toFixed(2).replace(/\.?0+$/, '')}-hour job to ${esc(first)}'s ${esc(window.Matching.dayWord(o.date, window.Workshop.snapshot()))}</div>
         ${parts ? parts.map((c) => `<div>${esc(window.Parts.describe(c))}</div>`).join('') : '<div class="bk-err">Some parts can no longer get here in time for this day.</div>'}</div>` : '';
-      return `<div class="bk-slot">${esc(window.Matching.dayShort(o.date))}, ${hhmm(o.from)} to ${hhmm(o.to)}</div>
+      return `<div class="bk-best">Suggested</div><div class="bk-slot">${esc(window.Matching.dayShort(o.date))}, ${hhmm(o.from)} to ${hhmm(o.to)}</div>
         <div class="bk-who">${esc(o.tech)} · ${esc(o.bay)}</div>
         ${extras.length ? `<div class="sm"><b>${esc(m.form.type)} plus ${extras.length} extra${extras.length > 1 ? 's' : ''}</b>: ${esc(extras.map((x) => x.name.toLowerCase()).join(', '))}.</div>` : ''}
         <div class="sm">${esc(o.reason)}</div>${chips}${will}
@@ -462,7 +701,17 @@ window.Copilot = (function () {
   /** Typing into the form updates its message without a repaint, so focus stays put. */
   function formInput(id, field, value) {
     const m = findMsg('booking-form', id);
-    if (m && !m.done) m.form[field] = value;
+    if (!m || m.done) return;
+    m.form[field] = value;
+    if (field !== 'reg') return;
+    // A registration we know fills in the car, unless the advisor has typed their own.
+    const car = window.Vehicles.lookup(value.trim());
+    const name = car ? `${car.make} ${car.model}` : '';
+    const auto = m.autoVehicle && m.form.vehicle === m.autoVehicle;
+    if (car && (!m.form.vehicle || auto)) { m.form.vehicle = name; m.autoVehicle = name; }
+    if (!car && auto) { m.form.vehicle = ''; m.autoVehicle = ''; }
+    m.car = car;
+    paint();
   }
 
   function bookingType(id, type) {
@@ -477,6 +726,7 @@ window.Copilot = (function () {
     const m = findMsg('booking-extras', id);
     if (!m || m.done || S.busy) return;
     S.busy = true;
+    stick = true;
     m.done = true;
     const f = m.form;
     const extras = picked(m);
@@ -493,6 +743,7 @@ window.Copilot = (function () {
     }
     S.busy = false;
     paint(true);
+    focusAction('[data-a="bk-book"]');
   }
 
   /**
@@ -590,8 +841,10 @@ window.Copilot = (function () {
   function setContext() {
     const el = document.getElementById('chat-ctx');
     if (el) el.textContent = { dashboard: 'Dashboard', plan: 'Improvement plan' }[window.App.view()] || 'Technician planner';
+    const q = document.getElementById('chat-q');
+    if (q) q.placeholder = placeholderText();
     paint();
   }
 
-  return { send, setOpen, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking };
+  return { send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking };
 })();

@@ -128,6 +128,9 @@ window.App = (function () {
 
   const ACTIONS = {
     chat: () => window.Copilot.setOpen(!window.Copilot.isOpen()),
+    'chat-new': () => window.Copilot.newChat(),
+    'chat-jump': () => window.Copilot.jump(),
+    'chat-steps': (el) => window.Copilot.toggleSteps(el.dataset.m),
     ask: (el) => window.Copilot.send(el.dataset.v),
     reopen: (el) => window.Copilot.reopen(el.dataset.v),
     'go-planner': () => { window.Workshop.clearPreview(); showPlanner(); },
@@ -135,7 +138,10 @@ window.App = (function () {
     'pl-view': (el) => window.Workshop.setView(main, el.dataset.v),
     'plan-apply': () => window.Copilot.applyPlan(),
     'plan-undo': () => window.Copilot.undoPlan(),
-    'plan-back': showPlan,
+    'plan-back': () => {
+      // A booking preview has no plan screen behind it, only the chat.
+      if ((window.Copilot.plan() || {}).booking) { window.Workshop.clearPreview(); showPlanner(); } else showPlan();
+    },
     'plan-preview': () => { window.Workshop.preview(window.Copilot.plan()); showPlanner(); },
     collapse: () => {
       const shell = document.getElementById('shell');
