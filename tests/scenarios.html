@@ -192,10 +192,63 @@ async function run() {
       f.remove();
     }
   }
+
+  // The AI agent call drives the copilot, so it needs the whole app, not just the logic files.
+  for (const [setup, prep] of Object.entries(CALL_SETUPS)) {
+    const f = await freshApp();
+    const w = f.contentWindow;
+    let res;
+    try { prep(w); res = await checkCall(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+    total++; if (res.ok) pass++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${setup}</td><td>AI agent call</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
+    tr.lastChild.textContent = res.got || '';
+    rows.appendChild(tr);
+    f.remove();
+  }
+
   const sum = document.getElementById('sum');
   sum.textContent = `${pass} of ${total} passed`;
   sum.className = pass === total ? 'pass' : 'fail';
   window.RESULT = { pass, total };
+}
+
+/* ---------- the simulated AI agent call ---------- */
+
+function freshApp() {
+  return new Promise((resolve) => {
+    const f = document.createElement('iframe');
+    f.style.cssText = 'display:block;position:fixed;left:-3000px;top:0;width:1440px;height:860px';
+    f.src = '../index.html?t=' + Math.random();
+    f.onload = () => resolve(f);
+    document.body.appendChild(f);
+  });
+}
+
+const CALL_SETUPS = {
+  'Fresh load': () => {},
+  'After "Fix my workbays"': (w) => w.Workshop.apply(w.Optimiser.create('all')),
+};
+
+/** Plays the call fast, then checks the booking landed and the agent's words match it. */
+async function checkCall(w) {
+  const sum = await w.Call.start({ speed: 20 });
+  const s = w.Call.state();
+  const ctx = s.ctx;
+  const b = ctx.booked;
+  if (!sum || !b) return { ok: false, got: `Not booked. ${s.entries.map((e) => e.text || e.note).slice(-3).join(' | ')}` };
+  const card = w.Workshop.snapshot().cards.find((c) => /^a/.test(c.id) && c.res === b.tech);
+  const parts = w.Parts.state();
+  const said = s.entries.filter((e) => e.kind === 'line' && e.speaker === 'agent').map((e) => e.text).join(' ');
+  const first = b.tech.split(/\s+/)[0];
+  const time = w.Optimiser.rules.hhmm(b.from).replace(/^0/, '');
+  const price = `£${Math.round(ctx.chosen.reduce((a, i) => a + i.price, 0)).toLocaleString('en-GB')}`;
+  const extrasOnCard = card && ctx.chosen.every((i) => card.l2.toLowerCase().includes(i.name.toLowerCase()));
+  const ok = !!card && extrasOnCard
+    && parts.partHolds.length + parts.orders.length > 0
+    && said.includes(`with ${first}`) && said.includes(`at ${time}`) && said.includes(price)
+    && w.App.view() === 'planner' && s.status === 'ended';
+  return { ok, got: `${b.tech} ${time}, ${ctx.chosen.length} extras ${price}, ${parts.partHolds.length} held, ${parts.orders.length} ordered. ${sum.title}` };
 }
 
 // Inside the hidden frame, loading the scripts above is all this page does.

@@ -135,5 +135,17 @@ window.Vehicles = (function () {
     return Math.round((miles + (car.mpy / 365) * days) / 100) * 100;
   }
 
-  return { ITEMS, COVERS, lookup, estimateMileage, regs: () => Object.keys(CARS) };
+  // Customers the phone system can match a caller to. Invented, for the call demo.
+  const CUSTOMERS = [
+    { name: 'Mr R Patel', title: 'Mr Patel', phone: '07700 900123', reg: 'SC20 UYT' },
+  ];
+
+  /** The customer and their car for a caller's number, or null. */
+  function lookupCaller(number) {
+    const digits = (s) => String(s || '').replace(/\D/g, '');
+    const c = CUSTOMERS.find((x) => digits(x.phone) === digits(number));
+    return c ? Object.assign({}, c, { car: lookup(c.reg) }) : null;
+  }
+
+  return { ITEMS, COVERS, lookup, lookupCaller, estimateMileage, regs: () => Object.keys(CARS) };
 })();

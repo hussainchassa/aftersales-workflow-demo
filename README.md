@@ -27,10 +27,18 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
   - what the customer turned down on a health check in the last 12 months
 
   Only extras whose parts can be in Branch 1 by the end of the working day before the appointment are offered, whether from the shelf, a transfer from another branch, or the supplier. The top three are ticked, and the job gets longer to fit them. One "Book and order" confirmation holds the parts and places any transfers or orders, and undo reverses the lot.
+- **An AI agent taking a booking call (simulated):** "Simulate incoming call" in the copilot, or `index.html?call=1`, rings in a call from Mr Patel (SC20 UYT). The AI agent answers, and a live transcript plays in the main area while the agent works the real booking flow in the copilot, beside it:
+  - it fills in the booking
+  - it offers the extras, which the customer accepts
+  - it finds a technician and books it once the customer says yes
+
+  Each action is marked in the transcript as it happens. When the job is booked, the planner shows it, and a strip follows the rest of the call. The copilot then posts a call summary.
+
+  Pause and Restart sit under the transcript. Restart puts the diary and parts back as they were when the phone rang. The call is scripted and silent, with about three minutes of real-time conversation; in a live demo, a voice provider would drive the same screens.
 
 In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
 
-To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`.
+To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`. To open straight on the simulated call, use `index.html?call=1`.
 
 ### Booking scenarios
 
@@ -56,7 +64,7 @@ Type the registration in the booking form, then click "Next".
 | KY72 BLN | Any job | Nothing due or outstanding |
 | Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
 
-Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It should say "55 of 55 passed".
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It should say "57 of 57 passed".
 
 ### Questions to try
 
@@ -82,7 +90,9 @@ Open `tests/scenarios.html` to check the matching and extras scenarios still beh
 | `js/parts.js` | Parts stock by branch, holds, transfers and supplier orders, and whether a part can arrive in time |
 | `js/vehicles.js` | Sample cars with mileage and health-check history, the service schedule, and what each job already covers |
 | `js/upsell.js` | Works out the extras worth offering for a car and appointment day, in the order to raise them |
-| `tests/scenarios.html` | Runs the matching and extras scenarios after different demo orders |
+| `js/call.js` | The simulated call: call events, the agent's tools over the copilot's booking flow, the script and its player. A voice provider adapter would replace the script and emit the same events |
+| `js/call-view.js` | The incoming-call card, the call transcript view and the call strip over the planner |
+| `tests/scenarios.html` | Runs the matching, extras and AI agent call scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
 | `js/copilot.js` | The chat panel, which updates in place so focus and animations carry through |
 | `css/chat.css` | The chat panel's styling and motion |
@@ -93,6 +103,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel and the call are invented as well.
 
 Chad made this edit

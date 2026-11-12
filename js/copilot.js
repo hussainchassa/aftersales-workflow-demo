@@ -16,9 +16,12 @@ window.Copilot = (function () {
 
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const S = { open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null };
+  // agent: set while the AI agent on a call is driving the copilot, so nobody else can.
+  const S = { open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null, agent: null };
 
+  // [label, icon, action]: without an action, the label is sent as a question.
   const STARTERS = [
+    ['Simulate incoming call', 'phone', 'call-start'],
     ['Book an appointment', 'calendar'],
     ['How is my aftersales performing?', 'chart'],
     ['Which technicians are under-utilised?', 'user'],
@@ -45,7 +48,7 @@ window.Copilot = (function () {
     const away = c.absentToday.length === 1 ? '1 technician' : `${c.absentToday.length} technicians`;
     return `<div class="c-empty"><h2><span>Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}.</span></h2>
       <p class="c-today">You have ${jobs} due today and ${away} away. What do you need?</p>
-      <div class="c-starts">${STARTERS.map(([q, icon], i) => `<button class="c-start" style="--i:${i}" data-a="ask" data-v="${esc(q)}"><span class="c-start-i">${ic(icon, 'sm')}</span><span>${esc(q)}</span>${ic('arrow', 'sm')}</button>`).join('')}</div>
+      <div class="c-starts">${STARTERS.map(([q, icon, action], i) => `<button class="c-start" style="--i:${i}" data-a="${action || 'ask'}" data-v="${esc(q)}"><span class="c-start-i">${ic(icon, 'sm')}</span><span>${esc(q)}</span>${ic('arrow', 'sm')}</button>`).join('')}</div>
       <p class="c-safe">${ic('lock', 'sm')}<span>I can read workshop data, build dashboards and plan improvements. The diary only changes when you approve a plan, and you can undo it. I can't post anything.</span></p></div>`;
   }
 
@@ -74,6 +77,16 @@ window.Copilot = (function () {
         ${live && m.plan.changes.length ? `<div class="c-acts"><button class="btn s p" data-a="plan-apply">Apply ${m.plan.changes.length} change${m.plan.changes.length === 1 ? '' : 's'}</button><button class="btn s" data-a="plan-preview">Preview on planner</button></div>` : ''}
         <div class="safe">${ic('lock', 'sm')}${m.plan.applied ? 'You approved this plan.' : m.plan.changes.length ? 'Nothing has changed yet. You approve it first.' : 'Nothing has changed.'}</div></div>`;
     }
+    if (m.kind === 'agent-note') {
+      return `<div class="agent-note ${m.done ? 'done' : ''}">${m.done ? ic('check', 'sm') : '<span class="agent-dot"></span>'}<span>${esc(m.text)}</span></div>`;
+    }
+    if (m.kind === 'call-summary') {
+      return `<div class="ccard call-sum"><div class="bk-h">Call summary</div>
+        <div class="c-result">${esc(m.title)}</div>
+        <ul class="c-log">${m.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+        <div class="c-acts"><button class="btn s" data-a="call-open">${ic('phone', 'sm')} View transcript</button></div>
+        <div class="safe">${ic('info', 'sm')}Simulated call. Nothing leaves this demo.</div></div>`;
+    }
     if (m.kind === 'booking-form') return bookingFormHtml(m);
     if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
@@ -81,7 +94,7 @@ window.Copilot = (function () {
       return `<div class="ccard ${m.undone ? '' : 'is-done'}"><div class="c-result">${m.undone ? '' : `<span class="done-tick">${ic('check', 'sm')}</span>`}${m.undone ? 'Reversed.' : 'Done.'} ${m.count === 1 ? '1 change is' : `${m.count} changes are`} ${m.undone ? 'out of' : 'in'} the diary.</div>${m.undone ? '' : `<div class="sm">${esc(m.detail)}</div>`}
         <ul class="c-log">${m.log.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
         ${m.undone ? '' : `<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button><button class="btn s" data-a="go-dash">Back to the dashboard</button></div>`}
-        <div class="safe">${ic('info', 'sm')}Approved by you at 09:42. Sample diary, so nothing leaves this demo.</div></div>`;
+        <div class="safe">${ic('info', 'sm')}${m.byAgent ? `Booked by the AI agent after ${esc(m.byAgent)} said yes on the call.` : 'Approved by you at 09:42.'} Sample diary, so nothing leaves this demo.</div></div>`;
     }
     if (m.kind === 'result') {
       const showing = m.seq === S.resultSeq && window.App.view() === 'dashboard';
@@ -214,8 +227,11 @@ window.Copilot = (function () {
 
     const r = root();
     r.classList.toggle('busy', S.busy);
+    r.classList.toggle('agent', !!S.agent);
     const q = r.querySelector('#chat-q');
-    r.querySelector('.send').disabled = S.busy || !q.value.trim();
+    q.disabled = !!S.agent;
+    q.placeholder = placeholderText();
+    r.querySelector('.send').disabled = S.busy || !!S.agent || !q.value.trim();
     r.querySelector('[data-a="chat-new"]').classList.toggle('hide', !S.messages.length);
     r.querySelector('.chat-fine').classList.toggle('gone', !S.messages.length);
 
@@ -241,6 +257,7 @@ window.Copilot = (function () {
   }
 
   function placeholderText() {
+    if (S.agent) return 'The AI agent is using the copilot on a call';
     const view = window.App.view();
     if (view === 'dashboard') return 'Ask a follow-up, like "Just Branch 2"';
     if (view === 'plan') return 'Say "do it" to approve, or ask something else';
@@ -266,7 +283,7 @@ window.Copilot = (function () {
   }
 
   function mount() {
-    const ctx = window.App.view() === 'dashboard' ? 'Dashboard' : 'Technician planner';
+    const ctx = { dashboard: 'Dashboard', plan: 'Improvement plan', call: 'Live call' }[window.App.view()] || 'Technician planner';
     root().innerHTML = `<div class="chat-h"><div class="spark">${ic('spark', 'sm')}</div><b>AI Assistance</b><span class="ctx" id="chat-ctx">${esc(ctx)}</span><span class="sp"></span><button class="icbtn hide" data-a="chat-new" aria-label="New conversation" title="New conversation">${ic('new', 'sm')}</button><button class="icbtn" data-a="chat" aria-label="Close AI Assistance" title="Close">${ic('x', 'sm')}</button></div>
       <div class="chat-b" id="chat-b" aria-live="polite"></div>
       <form class="chat-f" id="chat-f"><button type="button" class="chat-jump" data-a="chat-jump" tabindex="-1">${ic('dn', 'sm')}Latest</button>
@@ -324,7 +341,7 @@ window.Copilot = (function () {
   }
 
   function newChat() {
-    if (S.busy) return;
+    if (S.busy || S.agent) return;
     window.Workshop.clearPreview();
     S.messages = [];
     S.plan = null;
@@ -478,7 +495,7 @@ window.Copilot = (function () {
     await runSteps(plan.items.filter((i) => i.on && i.changes.length).map((i) => `${i.doing}`));
     window.Workshop.apply(plan);
     S.messages.push({
-      role: 'a', kind: 'applied', count: plan.changes.length, detail: plan.doneText, booking: plan.booking,
+      role: 'a', kind: 'applied', count: plan.changes.length, detail: plan.doneText, booking: plan.booking, byAgent: plan.byAgent,
       log: plan.items.filter((i) => i.on && i.changes.length).map((i) => i.logText),
     });
     window.App.showPlanner();
@@ -765,7 +782,7 @@ window.Copilot = (function () {
     const items = [{ on: true, changes: [change], doing: `Adding the appointment to ${o.tech.split(/\s+/)[0]}'s diary`, logText: `${change.l1} booked with ${o.tech}, ${when}, ${o.bay}` }];
     (partChanges || []).forEach((c) => items.push({ on: true, changes: [c], doing: window.Parts.describe(c).replace(/^(\w+)/, (w) => ({ Hold: 'Holding', Request: 'Requesting', Order: 'Ordering' }[w] || w)), logText: window.Parts.describe(c) }));
     return {
-      changes: [change], partChanges, booking: { id: m.id, idx }, items,
+      changes: [change], partChanges, booking: { id: m.id, idx }, items, byAgent: S.agent ? S.agent.name : null,
       doneText: partChanges && partChanges.length ? 'The new appointment is highlighted on the planner, and its parts are held or on their way.' : 'The new appointment is highlighted on the planner.',
     };
   }
@@ -808,6 +825,84 @@ window.Copilot = (function () {
     window.App.showPlanner();
   }
 
+  /* ---------- the AI agent on a call, driving the same booking flow ---------- */
+
+  function agentBegin(name) {
+    S.agent = { name };
+    stick = true;
+    if (!S.open) setOpen(true);
+    S.messages.push({ role: 'a', kind: 'agent-note', text: `The AI agent is on a call with ${name} and working in the copilot.` });
+    paint(true);
+  }
+
+  function agentEnd(text) {
+    const note = [...S.messages].reverse().find((m) => m.kind === 'agent-note' && !m.done);
+    if (note) { note.done = true; note.text = text || 'The AI agent has finished the call.'; }
+    S.agent = null;
+    paint(true);
+  }
+
+  /** Types a value into a booking field a few characters at a time, so the room sees it filled in. */
+  async function typeInto(id, field, value, pace) {
+    for (let i = 1; i <= value.length; i += 2) {
+      formInput(id, field, value.slice(0, i));
+      await wait(pace);
+    }
+    formInput(id, field, value);
+  }
+
+  /** Opens a booking form and fills it in as the agent hears the details. Returns the booking id. */
+  async function agentStartBooking(d, pace) {
+    stick = true;
+    S.messages.push({ role: 'a', text: `Booking for ${d.customer}, from the call.` });
+    S.messages.push({
+      role: 'a', kind: 'booking-form', id: ++bookingSeq, done: false, error: '',
+      form: { customer: '', phone: '', reg: '', vehicle: '', type: null, date: d.date, window: 'asap' },
+    });
+    const id = bookingSeq;
+    paint(true);
+    const step = pace || 40;
+    await typeInto(id, 'customer', d.customer, step);
+    await typeInto(id, 'phone', d.phone, step);
+    await typeInto(id, 'reg', d.reg, step * 2);
+    await wait(step * 4);
+    bookingType(id, d.type);
+    await wait(step * 4);
+    formInput(id, 'window', d.window);
+    paint();
+    return id;
+  }
+
+  function setExtras(id, ids) {
+    const m = findMsg('booking-extras', id);
+    if (!m || m.done) return;
+    m.ticked = new Set(ids);
+    paint();
+  }
+
+  /** Where a booking has got to, for the agent to talk about. */
+  function bookingInfo(id) {
+    return { form: findMsg('booking-form', id), extras: findMsg('booking-extras', id), suggestion: findMsg('booking-suggestion', id) };
+  }
+
+  function callSummary(title, lines) {
+    stick = true;
+    S.messages.push({ role: 'a', kind: 'call-summary', title, lines });
+    paint(true);
+  }
+
+  /** Clears the conversation for a restarted call, without changing the main area. */
+  function resetForCall() {
+    window.Workshop.clearPreview();
+    S.messages = [];
+    S.plan = null;
+    S.agent = null;
+    S.busy = false;
+    stick = true;
+    recall = 0;
+    paint('instant');
+  }
+
   function forwardNarrative() {
     const c = window.Workshop.capacity();
     return { title: `${c.unallocated} jobs are unallocated, ${c.unallocatedToday} of them due today.`, detail: `${c.absentToday.length} technicians are away today.` };
@@ -840,11 +935,12 @@ window.Copilot = (function () {
 
   function setContext() {
     const el = document.getElementById('chat-ctx');
-    if (el) el.textContent = { dashboard: 'Dashboard', plan: 'Improvement plan' }[window.App.view()] || 'Technician planner';
+    if (el) el.textContent = { dashboard: 'Dashboard', plan: 'Improvement plan', call: 'Live call' }[window.App.view()] || 'Technician planner';
     const q = document.getElementById('chat-q');
     if (q) q.placeholder = placeholderText();
     paint();
   }
 
-  return { send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking };
+  return { send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
+    agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy };
 })();

@@ -79,7 +79,9 @@ window.App = (function () {
   function renderCrumb() {
     const c = document.getElementById('crumb');
     const sep = '<span aria-hidden="true">/</span>';
-    if (S.view === 'plan') {
+    if (S.view === 'call') {
+      c.innerHTML = `<button data-a="inert">Workshop</button>${sep}<span>Bookings</span>${sep}<b>Live call</b>`;
+    } else if (S.view === 'plan') {
       c.innerHTML = `<button data-a="inert">Workshop</button>${sep}<span>Planning</span>${sep}<b>Improvement plan</b>`;
     } else if (S.view === 'planner') {
       c.innerHTML = `<button data-a="inert">Workshop</button>${sep}<span>Planning</span>${sep}<span>Planner</span>${sep}<b>Technician</b>`;
@@ -94,12 +96,26 @@ window.App = (function () {
     reporting.open = true;
   }
 
+  // A live call follows the user round the app as a strip, so every view re-checks it.
+  const syncCall = () => { if (window.CallView) window.CallView.sync(); };
+
   function showPlanner() {
     S.view = 'planner';
     window.Workshop.render(main, false);
     renderNav();
     renderCrumb();
     window.Copilot.setContext();
+    syncCall();
+  }
+
+  function showCall() {
+    S.view = 'call';
+    window.Workshop.clearPreview();
+    window.CallView.render(main);
+    renderNav();
+    renderCrumb();
+    window.Copilot.setContext();
+    syncCall();
   }
 
   function showDashboard(state, spec, mode) {
@@ -111,6 +127,7 @@ window.App = (function () {
     renderNav();
     renderCrumb();
     window.Copilot.setContext();
+    syncCall();
   }
 
   function showPlan() {
@@ -120,6 +137,7 @@ window.App = (function () {
     renderNav();
     renderCrumb();
     window.Copilot.setContext();
+    syncCall();
   }
 
   function refresh() {
@@ -180,6 +198,11 @@ window.App = (function () {
     'bx-find': (el) => window.Copilot.findTechnician(el.dataset.m),
     'bk-book': (el) => window.Copilot.book(el.dataset.m, el.dataset.v),
     'bk-preview': (el) => window.Copilot.previewBooking(el.dataset.m, el.dataset.v),
+    'call-start': () => window.Call.start(),
+    'call-open': showCall,
+    'call-pause': () => window.Call.togglePause(),
+    'call-restart': () => window.Call.restart(),
+    'call-take': () => toast('Not part of this prototype'),
   };
 
   // Booking form fields live in chat messages that repaint, so their values are kept on the message.
@@ -215,13 +238,16 @@ window.App = (function () {
   });
 
   return {
-    view: () => S.view, toast, showPlanner, showDashboard, showPlan, refresh,
+    view: () => S.view, toast, showPlanner, showDashboard, showPlan, showCall, refresh,
     start() {
       renderCrumb();
       showPlanner();
+      const params = new URLSearchParams(location.search);
       // Lets a presenter deep-link a question: index.html?ask=How%20is%20my%20aftersales%20performing
-      const ask = new URLSearchParams(location.search).get('ask');
+      const ask = params.get('ask');
       if (ask) window.Copilot.send(ask);
+      // Lets a presenter open straight on the simulated call: index.html?call=1
+      if (params.get('call')) window.Call.start();
     },
   };
 })();

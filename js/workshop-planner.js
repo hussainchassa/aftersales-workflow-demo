@@ -268,6 +268,20 @@ window.Workshop = (function () {
     grid.scrollTop = state.scrollTop;
     grid.addEventListener('scroll', () => { state.scrollLeft = grid.scrollLeft; state.scrollTop = grid.scrollTop; }, { passive: true });
     wire(mount);
+    if (state.reveal) reveal(grid);
+  }
+
+  /** Brings the first just-applied card into view, so a booking on another day isn't missed. */
+  function reveal(grid) {
+    state.reveal = false;
+    const card = grid.querySelector('.pl-card.ai');
+    if (!card) return;
+    const g = grid.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    const left = grid.scrollLeft + (c.left - g.left) - RES_WIDTH - 60;
+    const top = grid.scrollTop + (c.top - g.top) - g.height / 3;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    grid.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
   }
 
   function refreshGrid(mount) {
@@ -374,6 +388,7 @@ window.Workshop = (function () {
     // Parts are saved with the diary, so one undo reverses a booking and its parts together.
     history.push(Object.assign(clone({ cards: live.cards, jobs: live.jobs, holds: live.holds }), { parts: window.Parts ? window.Parts.snapshot() : null }));
     live.cards.forEach((c) => { delete c.ai; });
+    state.reveal = true;
     applyChanges(live, plan.changes, 'ai');
     if (plan.partChanges && window.Parts) window.Parts.apply(plan.partChanges);
     state.preview = null;
@@ -397,5 +412,19 @@ window.Workshop = (function () {
     };
   }
 
-  return { render, search, toggleDay, capacity, setView, preview, clearPreview, apply, undo, snapshot, canUndo: () => history.length > 0 };
+  /** Everything a demo restart needs to put back: the diary, its undo history and the parts. */
+  function saveState() {
+    return clone({ cards: live.cards, jobs: live.jobs, holds: live.holds, history, parts: window.Parts ? window.Parts.snapshot() : null });
+  }
+
+  function restoreState(s) {
+    const copy = clone(s);
+    live.cards = copy.cards; live.jobs = copy.jobs; live.holds = copy.holds;
+    history.length = 0;
+    copy.history.forEach((h) => history.push(h));
+    if (copy.parts && window.Parts) window.Parts.restore(copy.parts);
+    state.preview = null;
+  }
+
+  return { render, search, toggleDay, capacity, setView, preview, clearPreview, apply, undo, snapshot, saveState, restoreState, canUndo: () => history.length > 0 };
 })();
