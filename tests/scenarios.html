@@ -219,7 +219,7 @@ function freshApp() {
   return new Promise((resolve) => {
     const f = document.createElement('iframe');
     f.style.cssText = 'display:block;position:fixed;left:-3000px;top:0;width:1440px;height:860px';
-    f.src = '../index.html?t=' + Math.random();
+    f.src = '../index.html?app=service&t=' + Math.random();
     f.onload = () => resolve(f);
     document.body.appendChild(f);
   });

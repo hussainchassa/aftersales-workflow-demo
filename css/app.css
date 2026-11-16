@@ -97,3 +97,17 @@ main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-
 @media (max-width: 1080px) { .loc span { display: none; } }
 @media (max-width: 900px) { .side { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Applications launcher, like the DMS home screen */
+button.logo { padding: 0; border: 0; cursor: pointer; }
+button.logo:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+body.at-launcher .side, body.at-launcher #chat, body.at-launcher .loc { display: none; }
+.apps { height: 100%; overflow-y: auto; padding: 20px; background: var(--chrome); }
+.apps-card { max-width: 1240px; background: #fff; border-radius: 12px; box-shadow: var(--shadow); }
+.apps-card h1 { margin: 0; padding: 14px 20px; font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 600; border-bottom: 1px solid var(--line-2); }
+.apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 20px 24px; }
+.app-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 100px; padding: 14px 8px 12px; font: inherit; font-size: 14px; color: #fff; background: var(--tile); border: 0; border-radius: 4px; cursor: pointer; transition: transform .15s, box-shadow .15s, filter .15s; }
+.app-tile .i { width: 34px; height: 34px; stroke-width: 1.6; }
+.app-tile:hover { transform: translateY(-2px); box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .45); filter: brightness(1.06); }
+.app-tile:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.bi-home { height: 100%; background: #d2d1d8; }

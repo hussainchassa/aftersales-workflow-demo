@@ -18,8 +18,14 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
 
 ## What's in the demo
 
-- **Technician planner:** a rebuild of the Pinewood workshop planner, with the date range, scale slider, filters and unallocated jobs working.
-- **AI Assistance:** the copilot panel, opened from the bottom of the left navigation. Ask "How is my aftersales performing?" and it builds a dashboard in the main area.
+The prototype opens on an **Applications** screen, like the Pinewood DMS. Two of the tiles open, and each app is separate, with its own menu and its own AI Assistance conversation. The Pinewood logo in the top bar goes back to Applications.
+
+- **BI: agentic reporting.** BI opens with AI Assistance ready. Ask "How is my aftersales performing?" and it builds a dashboard in the main area, which you can refine by chatting ("Just Branch 2", "last 30 days"). Each report is listed under Reports. BI only reports. It doesn't change or link to the diary.
+- **Service: the technician planner.** A rebuild of the Pinewood workshop planner, with the date range, scale slider, filters and unallocated jobs working. Its AI Assistance books appointments, offers extras, plans improvements ("Fix my workbays and technicians"), answers "What's coming up in the planner?" and runs the simulated AI agent call.
+
+A question for the other app gets a short reply saying where to ask it.
+
+### In Service
 
 - **Booking with technician matching:** "Book an appointment" in the copilot opens a booking form. It suggests a time and technician from each technician's job history, explains why, and offers alternatives. Booking puts the job on the planner.
 - **Extras on the booking call:** after the booking form, "Next" looks the car up and lists extra work worth offering:
@@ -38,7 +44,10 @@ Open `index.html` in a browser. There is nothing to install or build, and no API
 
 In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
 
-To open straight on an answer when presenting, use `index.html?ask=How%20is%20my%20aftersales%20performing%3F`. To open straight on the simulated call, use `index.html?call=1`.
+Presenter links:
+- `index.html?app=service` or `index.html?app=bi` opens an app directly.
+- `index.html?ask=How%20is%20my%20aftersales%20performing%3F` opens BI on that answer.
+- `index.html?call=1` opens Service on the simulated call.
 
 ### Booking scenarios
 
@@ -68,15 +77,19 @@ Open `tests/scenarios.html` to check the matching and extras scenarios still beh
 
 ### Questions to try
 
-- Book an appointment
+In BI:
 - How is my aftersales performing?
 - Why is efficiency down at Branch 2?
 - Which technicians are under-utilised?
 - Compare my branches
-- What's coming up in the planner?
 - Where am I losing money?
-- Fix my workbays and technicians (then "do it" to approve, "undo" to reverse)
 - Follow-ups: "Just Branch 2", "last 30 days", "Break this down by technician", "Compare with last year", "add vhc", "hide scorecard", "reset filters"
+
+In Service:
+- Simulate incoming call
+- Book an appointment
+- What's coming up in the planner?
+- Fix my workbays and technicians (then "do it" to approve, "undo" to reverse)
 
 ## How it works
 
@@ -103,6 +116,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel and the call are invented as well.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel and the call are invented as well. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
 
 Chad made this edit

@@ -352,11 +352,11 @@ window.Dashboard = (function () {
       const l = AS.leakage(Intent.filterOf(s));
       const el = document.createElement('section');
       el.className = 'w s12 leak';
-      const applied = window.Workshop.canUndo();
-      const option = (title, gbp, lines, cta, ask) => `<button class="leak-o" data-a="ask" data-v="${esc(ask)}"><span class="leak-ot">${esc(title)}</span><span class="leak-ov">${esc(AS.approx(gbp))}<small> a week</small></span>${lines.map((x) => `<span class="leak-ol">${esc(x)}</span>`).join('')}<span class="leak-cta">${ic('sparks', 'sm')}${esc(cta)}${ic('arrow', 'sm')}</span></button>`;
-      el.innerHTML = `<div class="leak-s"><h3>${esc(w.title)}</h3><div class="leak-n">${esc(AS.approx(l.perWeek))}<small> a week</small></div><p>Estimated labour sales lost to avoidable idle time, ${esc(s.range.label.toLowerCase())}.</p>${applied ? `<p class="leak-done">${ic('check', 'sm')}A plan is live in the diary. This figure is history, so it won't move until new jobs close.</p>` : ''}</div>
-      ${option('Workbays', l.bay.perWeek, [`${Math.round(l.bay.hrs).toLocaleString('en-GB')} technician hours lost to blocked bays`, 'Vehicles parked on ramps with nobody working on them'], 'Show me the fix', 'Fix my workbays')}
-      ${option('Technician optimisation', l.tech.perWeek, [`${Math.round(l.tech.noJobHrs).toLocaleString('en-GB')} hours attended with no job allocated`, `${Math.round(l.tech.effHrs).toLocaleString('en-GB')} hours clocked but not sold`], 'Show me the fix', 'Fix my technician allocation')}`;
+      // Reporting only: where the money went. Fixing the diary is Service's job, so there's no way across from here.
+      const option = (title, gbp, lines) => `<div class="leak-o"><span class="leak-ot">${esc(title)}</span><span class="leak-ov">${esc(AS.approx(gbp))}<small> a week</small></span>${lines.map((x) => `<span class="leak-ol">${esc(x)}</span>`).join('')}</div>`;
+      el.innerHTML = `<div class="leak-s"><h3>${esc(w.title)}</h3><div class="leak-n">${esc(AS.approx(l.perWeek))}<small> a week</small></div><p>Estimated labour sales lost to avoidable idle time, ${esc(s.range.label.toLowerCase())}.</p></div>
+      ${option('Workbays', l.bay.perWeek, [`${Math.round(l.bay.hrs).toLocaleString('en-GB')} technician hours lost to blocked bays`, 'Vehicles parked on ramps with nobody working on them'])}
+      ${option('Technician optimisation', l.tech.perWeek, [`${Math.round(l.tech.noJobHrs).toLocaleString('en-GB')} hours attended with no job allocated`, `${Math.round(l.tech.effHrs).toLocaleString('en-GB')} hours clocked but not sold`])}`;
       return el;
     },
 
@@ -442,7 +442,7 @@ window.Dashboard = (function () {
   }
 
   function header(s, spec) {
-    return `<div class="d-top"><div><h1>${esc(spec.title)}</h1><p class="d-q">${ic('spark', 'sm')}<span>${esc(s.question || 'Built by AI Assistance')}</span></p></div><span class="sp"></span><button class="btn s ghost" data-a="go-planner">${ic('back', 'sm')} Technician planner</button></div><form class="d-filters" id="d-filters" aria-label="Dashboard filters">${filterRow(s, spec)}</form>`;
+    return `<div class="d-top"><div><h1>${esc(spec.title)}</h1><p class="d-q">${ic('spark', 'sm')}<span>${esc(s.question || 'Built by AI Assistance')}</span></p></div></div><form class="d-filters" id="d-filters" aria-label="Dashboard filters">${filterRow(s, spec)}</form>`;
   }
 
   function skeleton(mount, s, spec) {
@@ -484,15 +484,13 @@ window.Dashboard = (function () {
     // Stay on the subject of the question where it has a target; otherwise suggest the biggest gap.
     const worst = s.focus && M[s.focus].target != null ? s.focus : Intent.worstMetric(s);
     const topic = s.topics[0];
-    if (topic === 'capacity') return ['How is my aftersales performing?', 'Which technicians are under-utilised?'];
     if (topic !== 'why') out.push(`Why is ${lower(worst)} ${badWord(worst)}?`);
     const split = s.branch == null ? worstGroup(s, worst) : null;
     if (split && topic !== 'why' && s.tech == null) out.push(`Just ${split.worst.name}`);
-    if (topic === 'overview' || topic === 'leakage') out.unshift('Fix my workbays and technicians');
     if (topic === 'overview') out.push('Break this down by technician');
     if (topic === 'why' && s.branch == null) out.push(`Show ${lower(s.focus)} by technician`);
     if (s.compare !== 'year' && AS.prevRange(s.range, 'year')) out.push('Compare with last year');
-    if (!out.length || topic === 'why') out.push("What's coming up in the planner?");
+    if (!out.length || topic === 'why') out.push('Compare my branches');
     return out.slice(0, 3);
   }
 

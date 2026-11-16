@@ -20,6 +20,9 @@ window.Optimiser = (function () {
   const ceilQuarter = (h) => Math.ceil(h * 4 - 1e-9) / 4;
   const dowOf = (date) => AS.dateOf(AS.toN(date)).getUTCDay();
   const gbp = (v) => AS.approx(v);
+  // Service's own Branch 1 labour rate, fixed so planning never reads BI's figures.
+  // Set to the effective rate BI calculated when the apps were separated.
+  const LABOUR_RATE = 144.7069493559405;
 
   const jobKind = (job) => {
     const t = `${job.l1} ${job.l2}`;
@@ -204,7 +207,7 @@ window.Optimiser = (function () {
 
   function build(selected, focus) {
     const snap = window.Workshop.snapshot();
-    const rate = AS.value('elr', AS.summary({ from: AS.END - 89, to: AS.END, branch: 0 })) || 0;
+    const rate = LABOUR_RATE;
     const on = (id) => selected.has(id);
 
     // Order matters: clearing bays first gives the bookings more room.
@@ -277,24 +280,6 @@ window.Optimiser = (function () {
     return build(new Set(ids), focus);
   }
 
-  /* ---------- people decisions ---------- */
-
-  function advisory() {
-    const f = { from: AS.END - 89, to: AS.END };
-    const l = AS.leakage(f);
-    const notes = [];
-    const fmtH = (h) => `${Math.round(h)} hours`;
-    l.rows.slice().filter((r) => !AS.APPRENTICES.has(r.name)).sort((a, b) => b.eff - a.eff).slice(0, 2).forEach((r) => {
-      notes.push({
-        title: `Talk to ${r.name} (${AS.BRANCHES[r.branch]})`,
-        text: `${fmtH(r.eff)} clocked but not sold in the last 90 days. Check whether it's job mix, training or time-recording before changing anything.`,
-      });
-    });
-    const b2 = l.bays.filter((b) => b.branch === 1).reduce((a, b) => a + b.lost, 0);
-    if (b2 > 0) notes.push({ title: 'Branch 2 bays', text: `About ${gbp(b2)} lost to blocked bays in the last 90 days. Its diary isn't in this demo, so I can't plan the moves. Someone needs to review parts holds there.` });
-    return notes;
-  }
-
   /* ---------- screen ---------- */
 
   function itemHtml(i) {
@@ -309,17 +294,15 @@ window.Optimiser = (function () {
   function render(mount, plan) {
     const group = (key) => plan.items.filter((i) => i.group === key).map(itemHtml).join('');
     const allPass = plan.checks.every((c) => c.pass);
-    const notes = advisory().map((n) => `<div class="plan-note">${ic('info', 'sm')}<div><b>${esc(n.title)}</b><span>${esc(n.text)}</span></div></div>`).join('');
     const blocked = plan.unplaced.length ? `<div class="plan-note">${ic('alert', 'sm')}<div><b>${plan.unplaced.length} jobs I couldn't place</b><span>${esc(plan.unplaced.join(', '))}. No free technician and bay on the due date, so these need a person.</span></div></div>` : '';
     mount.innerHTML = `<div class="dash" id="dash">
-      <div class="d-top"><div><h1>Improvement plan</h1><p class="d-q">${ic('spark', 'sm')}<span>Branch 1 main diary, next 14 days. Untick anything you don't want.</span></p></div><span class="sp"></span><button class="btn s ghost" data-a="go-dash">${ic('back', 'sm')} Back</button></div>
+      <div class="d-top"><div><h1>Improvement plan</h1><p class="d-q">${ic('spark', 'sm')}<span>Branch 1 main diary, next 14 days. Untick anything you don't want.</span></p></div><span class="sp"></span><button class="btn s ghost" data-a="go-planner">${ic('back', 'sm')} Technician planner</button></div>
       <div class="plan-sum">${plan.stats.map((x) => `<div class="kpi"><div class="kpi-l">${esc(x.label)}</div><div class="kpi-n">${esc(x.value)}</div></div>`).join('')}<div class="kpi"><div class="kpi-l">Labour in those hours</div><div class="kpi-n">${esc(gbp(plan.value))}</div></div></div>
       <h2 class="plan-g">Workbays</h2>${group('bays')}
       <h2 class="plan-g">Technician optimisation</h2>${group('techs')}
       ${blocked}
       <div class="plan-checks" aria-label="Plan checks">${plan.checks.map((c) => `<span class="${c.pass ? 'pass' : 'fail'}">${ic(c.pass ? 'check' : 'alert', 'sm')}${esc(c.label)}</span>`).join('')}</div>
-      <h2 class="plan-g">For you to decide</h2>${notes}
-      <footer class="prov">${ic('info', 'sm')}<span>Labour value uses the Branch 1 effective rate of ${esc(AS.format('elr', plan.rate))} an hour. It's an estimate of the work placed, not guaranteed extra sales. Sample data.</span></footer>
+      <footer class="prov">${ic('info', 'sm')}<span>Labour value uses the Branch 1 labour rate of ${esc(AS.format('elr', plan.rate))} an hour. It's an estimate of the work placed, not guaranteed extra sales. Sample data.</span></footer>
       <div class="plan-bar"><span class="sm">${esc(plan.summary)}</span><span class="sp"></span><button class="btn s" data-a="plan-preview" ${plan.changes.length ? '' : 'disabled'}>Preview on planner</button><button class="btn s p" data-a="plan-apply" ${plan.changes.length && allPass ? '' : 'disabled'}>Apply ${plan.changes.length} changes</button></div>
     </div>`;
   }
@@ -335,7 +318,7 @@ window.Optimiser = (function () {
   }
 
   // Shared with Matching, so new appointments obey the same diary rules as plans.
-  const rules = { abs, overlaps, hhmm, when, ceilQuarter, dowOf, techBusy, techAway, bayBusy, baysFor, isApprentice, needsSeniorTech, dayLoad, validate };
+  const rules = { LABOUR_RATE, abs, overlaps, hhmm, when, ceilQuarter, dowOf, techBusy, techAway, bayBusy, baysFor, isApprentice, needsSeniorTech, dayLoad, validate };
 
   return { create, render, toggle, rules };
 })();

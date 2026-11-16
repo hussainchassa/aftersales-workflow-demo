@@ -357,9 +357,8 @@ window.Intent = (function () {
         w('stack', 'Labour and parts sales', { span: 7 }),
         w('trend', 'Efficiency', { metric: 'efficiency', by: 'branch', span: 5 }),
         w('scorecard', 'Scorecard', { by: 'branch', span: 12 }),
-        w('rank', 'Gross profit by job type', { metric: 'gp', by: 'type', span: 4 }),
-        w('attention', 'What needs your attention', { span: 5 }),
-        w('forward', 'Next 14 days', { span: 3 }),
+        w('rank', 'Gross profit by job type', { metric: 'gp', by: 'type', span: 5 }),
+        w('attention', 'What needs your attention', { span: 7 }),
       ];
       case 'financial': return [
         w('headline', null, { metric: focus || 'sales' }),

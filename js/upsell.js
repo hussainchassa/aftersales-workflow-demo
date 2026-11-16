@@ -21,8 +21,7 @@ window.Upsell = (function () {
   const TOP = 3;
   const MONTH = 30.44;
 
-  let rate = null;
-  const labourRate = () => rate || (rate = AS.value('elr', AS.summary({ from: AS.END - 89, to: AS.END, branch: 0 })) || 0);
+  const labourRate = () => window.Optimiser.rules.LABOUR_RATE;
 
   const fmtMiles = (n) => Math.round(n).toLocaleString('en-GB');
   const monthYear = (iso) => AS.dateOf(AS.toN(iso)).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });

@@ -16,19 +16,63 @@ window.Copilot = (function () {
 
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // mode: which app's AI Assistance this is, 'service' or 'bi'. Each keeps its own conversation.
   // agent: set while the AI agent on a call is driving the copilot, so nobody else can.
-  const S = { open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null, agent: null };
+  const S = { mode: 'service', open: false, messages: [], busy: false, state: null, resultSeq: 0, plan: null, returnTo: null, agent: null, convs: {} };
 
   // [label, icon, action]: without an action, the label is sent as a question.
-  const STARTERS = [
-    ['Simulate incoming call', 'phone', 'call-start'],
-    ['Book an appointment', 'calendar'],
-    ['How is my aftersales performing?', 'chart'],
-    ['Which technicians are under-utilised?', 'user'],
-    ['Where am I losing money?', 'report'],
-    ['Compare my branches', 'table'],
-    ["What's coming up in the planner?", 'clock'],
-  ];
+  const STARTERS = {
+    service: [
+      ['Simulate incoming call', 'phone', 'call-start'],
+      ['Book an appointment', 'calendar'],
+      ['Fix my workbays and technicians', 'tools'],
+      ["What's coming up in the planner?", 'clock'],
+    ],
+    bi: [
+      ['How is my aftersales performing?', 'chart'],
+      ['Why is efficiency down at Branch 2?', 'report'],
+      ['Which technicians are under-utilised?', 'user'],
+      ['Where am I losing money?', 'invoice'],
+      ['Compare my branches', 'table'],
+    ],
+  };
+
+  /** Switches to the other app's conversation, keeping this one for when it comes back. */
+  function setMode(mode) {
+    if (mode === S.mode) return;
+    S.convs[S.mode] = { messages: S.messages, state: S.state, resultSeq: S.resultSeq, plan: S.plan };
+    Object.assign(S, S.convs[mode] || { messages: [], state: null, resultSeq: 0, plan: null });
+    S.mode = mode;
+    stick = true;
+    recall = 0;
+    if (root().firstChild) paint('instant');
+  }
+
+  /* ---------- which app a question belongs to ---------- */
+
+  const SERVICE_KINDS = ['optimise', 'approve', 'undo', 'book', 'nav'];
+  const isCapacity = (r) => r.kind === 'dashboard' && r.state.topics.length === 1 && r.state.topics[0] === 'capacity';
+  function belongsTo(r) {
+    if (SERVICE_KINDS.includes(r.kind) || isCapacity(r)) return 'service';
+    if (r.kind === 'dashboard') return 'bi';
+    return null;
+  }
+  /** Only suggest follow-ups this app can answer. */
+  const chipsFor = (chips) => (chips || []).filter((c) => { const app = belongsTo(Intent.interpret(c, null)); return !app || app === S.mode; });
+
+  function crossReply(app) {
+    return app === 'bi'
+      ? "That's a reporting question. Open **BI** from Applications to ask it."
+      : "That's done in the Service app. Open **Service** from Applications to do it there.";
+  }
+
+  /** Service answers "What's coming up?" in the chat, from the diary, with no dashboard. */
+  function capacityReply() {
+    const c = window.Workshop.capacity();
+    const avail = c.days.reduce((a, d) => a + d.avail, 0);
+    const away = c.absentToday.length ? ` Away today: ${c.absentToday.join(', ')}.` : ' Nobody is away today.';
+    return `**${c.unallocated} jobs are unallocated** (${c.unallocatedHrs.toFixed(1)} hours), and ${c.unallocatedToday} of them are due today.${away} Over the next 14 days the diary has ${Math.round(avail).toLocaleString('en-GB')} technician hours available.`;
+  }
 
   /**
    * The seam for a real model. Replace the body with a call that returns the same
@@ -43,13 +87,23 @@ window.Copilot = (function () {
 
   function emptyHtml() {
     const hour = new Date().getHours();
-    const c = window.Workshop.capacity();
-    const jobs = c.unallocatedToday === 1 ? '1 unallocated job' : `${c.unallocatedToday} unallocated jobs`;
-    const away = c.absentToday.length === 1 ? '1 technician' : `${c.absentToday.length} technicians`;
-    return `<div class="c-empty"><h2><span>Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}.</span></h2>
-      <p class="c-today">You have ${jobs} due today and ${away} away. What do you need?</p>
-      <div class="c-starts">${STARTERS.map(([q, icon, action], i) => `<button class="c-start" style="--i:${i}" data-a="${action || 'ask'}" data-v="${esc(q)}"><span class="c-start-i">${ic(icon, 'sm')}</span><span>${esc(q)}</span>${ic('arrow', 'sm')}</button>`).join('')}</div>
-      <p class="c-safe">${ic('lock', 'sm')}<span>I can read workshop data, build dashboards and plan improvements. The diary only changes when you approve a plan, and you can undo it. I can't post anything.</span></p></div>`;
+    const hello = `Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}.`;
+    let today;
+    let safe;
+    if (S.mode === 'bi') {
+      today = 'Ask about your aftersales performance and I\'ll build a report from the job card data.';
+      safe = 'I read job card data and build reports. Reports don\'t change anything.';
+    } else {
+      const c = window.Workshop.capacity();
+      const jobs = c.unallocatedToday === 1 ? '1 unallocated job' : `${c.unallocatedToday} unallocated jobs`;
+      const away = c.absentToday.length === 1 ? '1 technician' : `${c.absentToday.length} technicians`;
+      today = `You have ${jobs} due today and ${away} away. What do you need?`;
+      safe = 'I can book appointments and plan improvements to the diary. The diary only changes when you approve, and you can undo it. I can\'t post anything.';
+    }
+    return `<div class="c-empty"><h2><span>${hello}</span></h2>
+      <p class="c-today">${today}</p>
+      <div class="c-starts">${STARTERS[S.mode].map(([q, icon, action], i) => `<button class="c-start" style="--i:${i}" data-a="${action || 'ask'}" data-v="${esc(q)}"><span class="c-start-i">${ic(icon, 'sm')}</span><span>${esc(q)}</span>${ic('arrow', 'sm')}</button>`).join('')}</div>
+      <p class="c-safe">${ic('lock', 'sm')}<span>${safe}</span></p></div>`;
   }
 
   /** Suggestions only make sense as a next step, so only the latest message keeps them. */
@@ -93,7 +147,7 @@ window.Copilot = (function () {
     if (m.kind === 'applied') {
       return `<div class="ccard ${m.undone ? '' : 'is-done'}"><div class="c-result">${m.undone ? '' : `<span class="done-tick">${ic('check', 'sm')}</span>`}${m.undone ? 'Reversed.' : 'Done.'} ${m.count === 1 ? '1 change is' : `${m.count} changes are`} ${m.undone ? 'out of' : 'in'} the diary.</div>${m.undone ? '' : `<div class="sm">${esc(m.detail)}</div>`}
         <ul class="c-log">${m.log.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-        ${m.undone ? '' : `<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button><button class="btn s" data-a="go-dash">Back to the dashboard</button></div>`}
+        ${m.undone ? '' : '<div class="c-acts"><button class="btn s" data-a="plan-undo">Undo all</button></div>'}
         <div class="safe">${ic('info', 'sm')}${m.byAgent ? `Booked by the AI agent after ${esc(m.byAgent)} said yes on the call.` : 'Approved by you at 09:42.'} Sample diary, so nothing leaves this demo.</div></div>`;
     }
     if (m.kind === 'result') {
@@ -233,7 +287,9 @@ window.Copilot = (function () {
     q.placeholder = placeholderText();
     r.querySelector('.send').disabled = S.busy || !!S.agent || !q.value.trim();
     r.querySelector('[data-a="chat-new"]').classList.toggle('hide', !S.messages.length);
-    r.querySelector('.chat-fine').classList.toggle('gone', !S.messages.length);
+    const fine = r.querySelector('.chat-fine');
+    fine.textContent = S.mode === 'bi' ? 'Sample data. Reports don\'t change anything.' : 'Sample data. The diary only changes when you approve.';
+    fine.classList.toggle('gone', !S.messages.length);
 
     if (scroll || added) {
       const behavior = scroll === 'instant' ? 'auto' : 'smooth';
@@ -258,10 +314,15 @@ window.Copilot = (function () {
 
   function placeholderText() {
     if (S.agent) return 'The AI agent is using the copilot on a call';
+    if (S.mode === 'bi') return window.App.view() === 'dashboard' ? 'Ask a follow-up, like "Just Branch 2"' : 'Ask about your aftersales';
+    if (window.App.view() === 'plan') return 'Say "do it" to approve, or ask something else';
+    return 'Book an appointment, or ask about the diary';
+  }
+
+  function contextLabel() {
     const view = window.App.view();
-    if (view === 'dashboard') return 'Ask a follow-up, like "Just Branch 2"';
-    if (view === 'plan') return 'Say "do it" to approve, or ask something else';
-    return 'Ask anything, or book an appointment';
+    if (S.mode === 'bi') return view === 'dashboard' ? 'Report' : 'BI';
+    return { plan: 'Improvement plan', call: 'Live call' }[view] || 'Technician planner';
   }
 
   function fitComposer(q) {
@@ -283,7 +344,7 @@ window.Copilot = (function () {
   }
 
   function mount() {
-    const ctx = { dashboard: 'Dashboard', plan: 'Improvement plan', call: 'Live call' }[window.App.view()] || 'Technician planner';
+    const ctx = contextLabel();
     root().innerHTML = `<div class="chat-h"><div class="spark">${ic('spark', 'sm')}</div><b>AI Assistance</b><span class="ctx" id="chat-ctx">${esc(ctx)}</span><span class="sp"></span><button class="icbtn hide" data-a="chat-new" aria-label="New conversation" title="New conversation">${ic('new', 'sm')}</button><button class="icbtn" data-a="chat" aria-label="Close AI Assistance" title="Close">${ic('x', 'sm')}</button></div>
       <div class="chat-b" id="chat-b" aria-live="polite"></div>
       <form class="chat-f" id="chat-f"><button type="button" class="chat-jump" data-a="chat-jump" tabindex="-1">${ic('dn', 'sm')}Latest</button>
@@ -347,7 +408,7 @@ window.Copilot = (function () {
     S.plan = null;
     stick = true;
     recall = 0;
-    if (window.App.view() === 'dashboard') paint('instant');
+    if (S.mode === 'bi') paint('instant');
     else window.App.showPlanner();
     root().querySelector('#chat-q').focus();
   }
@@ -389,11 +450,18 @@ window.Copilot = (function () {
     await wait(350);
 
     try {
-      const result = await plan(question, S.state);
+      const result = await plan(question, S.mode === 'bi' ? S.state : null);
       kind = result.kind;
       S.messages.splice(S.messages.indexOf(typing), 1);
-      if (result.kind === 'reply') {
-        S.messages.push({ role: 'a', text: result.text, chips: result.chips, planner: result.planner });
+      const app = belongsTo(result);
+      if (app && app !== S.mode) {
+        // Each app only does its own work; the other app is a separate place to go.
+        kind = 'reply';
+        S.messages.push({ role: 'a', text: crossReply(app) });
+      } else if (isCapacity(result)) {
+        S.messages.push({ role: 'a', text: capacityReply(), chips: ['Fix my workbays and technicians', 'Book an appointment'] });
+      } else if (result.kind === 'reply') {
+        S.messages.push({ role: 'a', text: result.text, chips: chipsFor(result.chips), planner: result.planner && S.mode === 'service' });
       } else if (result.kind === 'optimise') {
         await buildPlan(result.focus);
       } else if (result.kind === 'approve') {
@@ -436,13 +504,14 @@ window.Copilot = (function () {
     }
     steps.finished = true;
     steps.at = steps.steps.length;
-    window.App.showDashboard(state, spec, 'animate');
     S.resultSeq++;
+    window.App.showDashboard(state, spec, 'animate', S.resultSeq);
     const narrative = spec.forward ? forwardNarrative() : Dashboard.narrate(state, (spec.widgets.find((w) => w.type === 'headline') || {}).metric);
     S.messages.push({
       role: 'a', kind: 'result', seq: S.resultSeq, state, title: narrative.title, detail: narrative.detail,
-      stats: Dashboard.resultStats(state, spec), notes: result.notes || [], chips: Dashboard.followUps(state),
+      stats: Dashboard.resultStats(state, spec), notes: result.notes || [], chips: chipsFor(Dashboard.followUps(state)),
     });
+    window.App.addReport(S.resultSeq, spec.title);
   }
 
   async function runSteps(labels) {
@@ -929,18 +998,18 @@ window.Copilot = (function () {
     if (!m) return;
     S.state = m.state;
     S.resultSeq = m.seq;
-    window.App.showDashboard(m.state, Intent.buildSpec(m.state), 'instant');
+    window.App.showDashboard(m.state, Intent.buildSpec(m.state), 'instant', m.seq);
     paint();
   }
 
   function setContext() {
     const el = document.getElementById('chat-ctx');
-    if (el) el.textContent = { dashboard: 'Dashboard', plan: 'Improvement plan', call: 'Live call' }[window.App.view()] || 'Technician planner';
+    if (el) el.textContent = contextLabel();
     const q = document.getElementById('chat-q');
     if (q) q.placeholder = placeholderText();
     paint();
   }
 
-  return { send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
+  return { setMode, mode: () => S.mode, send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
     agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy };
 })();
