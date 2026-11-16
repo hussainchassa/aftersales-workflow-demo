@@ -138,6 +138,7 @@ window.Vehicles = (function () {
   // Customers the phone system can match a caller to. Invented, for the call demo.
   const CUSTOMERS = [
     { name: 'Mr R Patel', title: 'Mr Patel', phone: '07700 900123', reg: 'SC20 UYT' },
+    { name: 'Mrs P Hughes', title: 'Mrs Hughes', phone: '07700 900456', reg: 'GY21 NBF' },
   ];
 
   /** The customer and their car for a caller's number, or null. */

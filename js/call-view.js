@@ -21,9 +21,14 @@ window.CallView = (function () {
 
   function ringHtml(caller, answering) {
     const car = caller.car;
-    const last = car.visits[car.visits.length - 1][0];
+    const out = st().direction === 'outbound';
+    const carLine = car ? `<div class="ring-car"><span class="plate">${esc(car.reg)}</span>${esc(car.registered.slice(0, 4))} ${esc(car.make)} ${esc(car.model)}${out ? '' : ` · last in ${esc(window.Matching.dayShort(car.visits[car.visits.length - 1][0]).split(' ').slice(2).join(' '))}`}</div>` : '';
+    if (out) {
+      return `<div class="ring-top"><span class="ring-ic out">${ic('phone')}</span><div><b>Calling ${esc(caller.name)}</b><span>${esc(caller.phone)} · outgoing, approved by you</span></div></div>
+        ${carLine}<div class="ring-acts"><span class="ring-agent on">${ic('spark', 'sm')} The AI agent is calling…</span></div>`;
+    }
     return `<div class="ring-top"><span class="ring-ic">${ic('phone')}</span><div><b>Incoming call</b><span>${esc(caller.phone)} · matched to ${esc(caller.name)}</span></div></div>
-      <div class="ring-car"><span class="plate">${esc(car.reg)}</span>${esc(car.registered.slice(0, 4))} ${esc(car.make)} ${esc(car.model)} · last in ${esc(window.Matching.dayShort(last).split(' ').slice(2).join(' '))}</div>
+      ${carLine}
       <div class="ring-acts"><span class="ring-agent ${answering ? 'on' : ''}">${answering ? `${ic('spark', 'sm')} AI agent answering…` : 'Ringing…'}</span><button class="btn s" data-a="call-take">Take the call myself</button></div>`;
   }
 
@@ -76,7 +81,7 @@ window.CallView = (function () {
     const c = s.caller;
     if (!c) { mount.innerHTML = '<div class="call-v"><p class="call-none">No call yet. Click <b>Simulate incoming call</b> in AI Assistance.</p></div>'; return; }
     mount.innerHTML = `<div class="call-v">
-      <div class="call-h">${statusBadge()}<b>${esc(c.name)}</b><span class="muted">${esc(c.phone)} · <span data-call-timer>${Call.clock(Call.elapsed())}</span></span><span class="sp"></span><span class="call-by">${ic('spark', 'sm')} Handled by the AI agent</span></div>
+      <div class="call-h">${statusBadge()}<b>${esc(c.name)}</b><span class="muted">${esc(c.phone)} · <span data-call-timer>${Call.clock(Call.elapsed())}</span></span><span class="sp"></span><span class="call-by">${ic('spark', 'sm')} ${s.direction === 'outbound' ? 'Outgoing call by the AI agent' : 'Handled by the AI agent'}</span></div>
       <div class="call-tx" id="call-tx" aria-live="polite">${s.entries.map(entryHtml).join('')}<div class="tx-tail">${speakingHtml()}</div></div>
       <div class="call-f"><button class="btn s" data-a="call-pause" ${s.status === 'ended' ? 'disabled' : ''}>${ic(s.paused ? 'play' : 'pause', 'sm')} ${s.paused ? 'Resume' : 'Pause'}</button><button class="btn s" data-a="call-restart">${ic('restart', 'sm')} Restart</button><span class="sp"></span><span class="muted">Simulated call. No sound.</span></div>
     </div>`;

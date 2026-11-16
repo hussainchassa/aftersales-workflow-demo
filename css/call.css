@@ -77,3 +77,15 @@
   .tx-line { max-width: 90%; }
   .call-strip .strip-line { display: none; }
 }
+
+/* Swap request: the advisor approves before anyone is contacted */
+.swap { gap: 8px; border-color: #f0d39b; }
+.swap.done { border-color: var(--line); }
+.swap-moves { padding: 9px 11px; font-size: 12.5px; background: #fffbf1; border-radius: 8px; }
+.swap-moves ul { margin: 4px 0 0; padding-left: 18px; }
+.swap-moves li { margin-bottom: 2px; }
+.swap-dead { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--amber); }
+.swap-st { font-weight: 600; color: var(--ink-2); }
+.swap.done .swap-st { color: var(--ok); }
+.ring-ic.out { background: var(--brand); animation: none; }
+.ring-ic.out .i { animation: none; }

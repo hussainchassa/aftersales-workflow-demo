@@ -274,6 +274,9 @@ window.App = (function () {
     'call-pause': () => window.Call.togglePause(),
     'call-restart': () => window.Call.restart(),
     'call-take': () => toast('Not part of this prototype'),
+    'swap-approve': (el) => window.Copilot.approveSwap(el.dataset.m),
+    'swap-preview': (el) => window.Copilot.previewSwap(el.dataset.m),
+    'swap-decline': (el) => window.Copilot.declineSwap(el.dataset.m),
   };
 
   // Booking form fields live in chat messages that repaint, so their values are kept on the message.

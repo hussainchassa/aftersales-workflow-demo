@@ -141,6 +141,7 @@ window.Copilot = (function () {
         <div class="c-acts"><button class="btn s" data-a="call-open">${ic('phone', 'sm')} View transcript</button></div>
         <div class="safe">${ic('info', 'sm')}Simulated call. Nothing leaves this demo.</div></div>`;
     }
+    if (m.kind === 'swap') return swapHtml(m);
     if (m.kind === 'booking-form') return bookingFormHtml(m);
     if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
@@ -960,6 +961,110 @@ window.Copilot = (function () {
     paint(true);
   }
 
+  /* ---------- swap requests: the advisor decides before anyone is contacted ---------- */
+
+  let swapSeq = 0;
+  const DEMO_NOW = 9 + 42 / 60; // The planner's "now" on the demo day.
+  const shortDay = (iso) => window.Matching.dayShort(iso);
+
+  function swapRequest(swap) {
+    stick = true;
+    S.messages.push({ role: 'a', kind: 'swap', id: ++swapSeq, swap, state: 'pending', created: Date.now() });
+    paint(true);
+  }
+
+  /** Time left to the reply deadline, on the demo clock. */
+  function timeLeft(m) {
+    const nowH = DEMO_NOW + (Date.now() - m.created) / 3600000;
+    const left = Math.max(0, m.swap.deadline - nowH);
+    return `${Math.floor(left)}h ${String(Math.floor((left % 1) * 60)).padStart(2, '0')}m`;
+  }
+
+  function swapHtml(m) {
+    const s = m.swap;
+    const b = s.blocker;
+    const [date, from] = s.moved.from;
+    const altList = s.alternatives.map((a) => `${shortDay(a.date)} ${hhmm(a.from)} with ${a.res}`).join(', or ');
+    const status = {
+      pending: '',
+      declined: 'Declined. Nothing changed, and nobody was contacted.',
+      calling: `Approved. The AI agent is calling ${b.title}.`,
+      done: `${b.title} agreed. Both appointments have moved.`,
+      failed: `The swap didn't go ahead, so nothing moved.`,
+    }[m.state];
+    return `<div class="ccard swap ${m.state}"><div class="bk-h">Swap request</div>
+      <div class="c-result">${esc(s.callerName)} would prefer ${esc(shortDay(date))} at ${hhmm(from)}</div>
+      <div class="sm">Currently booked at ${hhmm(s.booked.from[1])} with ${esc(s.booked.res)}. ${hhmm(from)} is ${esc(b.customer)}'s ${esc(b.job)} booking (${esc(b.l1.split(' - ')[0])}) with ${esc(b.res)}, ${hhmm(b.from[1])} to ${hhmm(b.to[1])}.</div>
+      <div class="swap-moves"><b>If ${esc(b.title)} agrees</b><ul>
+        <li>${esc(s.callerTitle)}: ${hhmm(s.booked.from[1])} → <b>${hhmm(from)}</b> with ${esc(s.moved.res)}, ${esc(s.moved.bay)}</li>
+        <li>${esc(b.title)}: ${hhmm(b.from[1])} → ${esc(altList)}, whichever ${esc(b.title)} picks</li></ul></div>
+      ${m.state === 'pending' ? `<div class="swap-dead">${ic('clock', 'sm')}<span>Reply needed by ${hhmm(s.deadline)} today · <b data-swap-left="${m.id}">${timeLeft(m)}</b> left</span></div>
+      <div class="c-acts"><button class="btn s p" data-a="swap-approve" data-m="${m.id}">${ic('phone', 'sm')} Approve and call ${esc(b.title)}</button><button class="btn s" data-a="swap-preview" data-m="${m.id}">Preview on planner</button><button class="btn s" data-a="swap-decline" data-m="${m.id}">Decline</button></div>` : `<div class="sm swap-st">${esc(status)}</div>`}
+      <div class="safe">${ic('lock', 'sm')}Nothing is sent until you approve, and nothing moves unless ${esc(b.title)} says yes.</div></div>`;
+  }
+
+  setInterval(() => {
+    document.querySelectorAll('[data-swap-left]').forEach((el) => {
+      const m = findMsg('swap', el.dataset.swapLeft);
+      if (m) el.textContent = timeLeft(m);
+    });
+  }, 15000);
+
+  function previewSwap(id) {
+    const m = findMsg('swap', id);
+    if (!m || m.state !== 'pending') return;
+    const s = m.swap;
+    window.Workshop.preview(window.Swap.previewPlan(s), `${s.callerTitle} is shown at ${hhmm(s.moved.from[1])}, and ${s.blocker.title}'s booking is marked. Nothing moves unless ${s.blocker.title} agrees.`);
+    window.App.showPlanner();
+  }
+
+  function declineSwap(id) {
+    const m = findMsg('swap', id);
+    if (!m || m.state !== 'pending') return;
+    m.state = 'declined';
+    window.Workshop.clearPreview();
+    paint();
+  }
+
+  /** The advisor's approval: only now does the agent phone the other customer. */
+  async function approveSwap(id, opts) {
+    const m = findMsg('swap', id);
+    if (!m || m.state !== 'pending' || S.busy || S.agent) return null;
+    m.state = 'calling';
+    window.Workshop.clearPreview();
+    paint();
+    const sum = await window.Call.startOutbound(m.swap, opts);
+    const ctx = window.Call.state().ctx;
+    m.state = ctx && ctx.swapped ? 'done' : 'failed';
+    paint();
+    return sum;
+  }
+
+  /** Applies both moves as one change with one undo, after the customer said yes on the call. */
+  async function applySwap(swap, choice) {
+    const plan = window.Swap.swapPlan(swap, choice);
+    if (!plan) return false;
+    const a = swap.alternatives[choice];
+    const b = swap.blocker;
+    const [move1, move2] = plan.changes;
+    S.plan = Object.assign(plan, {
+      byAgent: S.agent ? S.agent.name : null,
+      items: [
+        { on: true, changes: [move1], doing: `Moving ${b.title} to ${shortDay(a.date)} ${hhmm(a.from)}`, logText: `${b.customer} moved to ${shortDay(a.date)} ${hhmm(a.from)} with ${a.res}, ${a.bay}` },
+        { on: true, changes: [move2], doing: `Moving ${swap.callerTitle} to ${shortDay(swap.moved.from[0])} ${hhmm(swap.moved.from[1])}`, logText: `${swap.callerName} moved to ${shortDay(swap.moved.from[0])} ${hhmm(swap.moved.from[1])} with ${swap.moved.res}, ${swap.moved.bay}` },
+      ],
+      doneText: 'Both moved appointments are highlighted on the planner.',
+    });
+    await applyPlan();
+    return true;
+  }
+
+  function notifyCustomer(name, text) {
+    stick = true;
+    S.messages.push({ role: 'a', text: `Message sent to ${name}: “${text}”` });
+    paint(true);
+  }
+
   /** Clears the conversation for a restarted call, without changing the main area. */
   function resetForCall() {
     window.Workshop.clearPreview();
@@ -1011,5 +1116,6 @@ window.Copilot = (function () {
   }
 
   return { setMode, mode: () => S.mode, send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
-    agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy };
+    agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy,
+    swapRequest, previewSwap, declineSwap, approveSwap, applySwap, notifyCustomer, swaps: () => S.messages.filter((m) => m.kind === 'swap') };
 })();

@@ -41,6 +41,14 @@ A question for the other app gets a short reply saying where to ask it.
   Each action is marked in the transcript as it happens. When the job is booked, the planner shows it, and a strip follows the rest of the call. The copilot then posts a call summary.
 
   Pause and Restart sit under the transcript. Restart puts the diary and parts back as they were when the phone rang. The call is scripted and silent, with about three minutes of real-time conversation; in a live demo, a voice provider would drive the same screens.
+- **Swapping into a preferred time:** this is part of the same call story.
+  1. Mr Patel asks for Friday at 8:00, but it's taken by Mrs Hughes's MOT and minor service.
+  2. The agent books the earliest good fit (09:30 with John) and logs 8:00 as his first choice.
+  3. After the call, a **swap request** appears in Service's AI Assistance for the advisor. It shows who holds the slot, what would move, the times that would suit Mrs Hughes, and a reply deadline. It has **Preview on planner**, **Approve and call Mrs Hughes** and **Decline** buttons. Nothing is sent until the advisor approves.
+  4. On approval, the AI agent phones Mrs Hughes on an outgoing call, using the same transcript view. She picks one of the times, and both appointments move as one change, with one Undo.
+  5. Mr Patel is sent a message with his new time.
+
+  Only the "yes" path is shown. If the other customer said no or didn't answer, nothing would move and nobody would be told. If 8:00 happens to be free already, the agent simply books it.
 
 In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
 
@@ -73,7 +81,7 @@ Type the registration in the booking form, then click "Next".
 | KY72 BLN | Any job | Nothing due or outstanding |
 | Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
 
-Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It should say "57 of 57 passed".
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It should say "58 of 58 passed".
 
 ### Questions to try
 
@@ -104,7 +112,8 @@ In Service:
 | `js/vehicles.js` | Sample cars with mileage and health-check history, the service schedule, and what each job already covers |
 | `js/upsell.js` | Works out the extras worth offering for a car and appointment day, in the order to raise them |
 | `js/call.js` | The simulated call: call events, the agent's tools over the copilot's booking flow, the script and its player. A voice provider adapter would replace the script and emit the same events |
-| `js/call-view.js` | The incoming-call card, the call transcript view and the call strip over the planner |
+| `js/call-view.js` | The incoming and outgoing call cards, the call transcript view and the call strip over the planner |
+| `js/swap.js` | Works out whose appointment blocks a preferred time, what would move and which times suit the other customer, and builds the swap as one change |
 | `tests/scenarios.html` | Runs the matching, extras and AI agent call scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
 | `js/copilot.js` | The chat panel, which updates in place so focus and animations carry through |
@@ -116,6 +125,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel and the call are invented as well. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel, Mrs Hughes, the calls and the Friday bookings that set up the swap are invented as well. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
 
 Chad made this edit

@@ -198,7 +198,7 @@ async function run() {
     const f = await freshApp();
     const w = f.contentWindow;
     let res;
-    try { prep(w); res = await checkCall(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+    try { prep(w); res = await checkCall(w, setup); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
     total++; if (res.ok) pass++;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${setup}</td><td>AI agent call</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
@@ -225,30 +225,55 @@ function freshApp() {
   });
 }
 
+const hughes = (w) => w.Workshop.snapshot().cards.find((c) => c.phone === '07700 900456');
+
 const CALL_SETUPS = {
   'Fresh load': () => {},
   'After "Fix my workbays"': (w) => w.Workshop.apply(w.Optimiser.create('all')),
+  // Fallback: with Mrs Hughes moved off Friday 8:00 first, Mr Patel should just get 8:00, with no swap.
+  'Fallback, 8:00 already free': (w) => {
+    const c = hughes(w);
+    w.Workshop.apply({ changes: [{ kind: 'move', id: c.id, res: c.res, bay: c.bay, from: ['2026-11-07', 13], to: ['2026-11-07', 14.5] }] });
+  },
 };
 
-/** Plays the call fast, then checks the booking landed and the agent's words match it. */
-async function checkCall(w) {
+/**
+ * Plays Mr Patel's call fast and checks the booking matches what the agent said. Where a swap
+ * request appears, approves it, plays Mrs Hughes's call, and checks both moves landed cleanly.
+ */
+async function checkCall(w, setup) {
   const sum = await w.Call.start({ speed: 20 });
   const s = w.Call.state();
   const ctx = s.ctx;
   const b = ctx.booked;
   if (!sum || !b) return { ok: false, got: `Not booked. ${s.entries.map((e) => e.text || e.note).slice(-3).join(' | ')}` };
+  const hhmm = (h) => w.Optimiser.rules.hhmm(h).replace(/^0/, '');
+  const said = (st) => st.entries.filter((e) => e.kind === 'line' && e.speaker === 'agent').map((e) => e.text).join(' ');
   const card = w.Workshop.snapshot().cards.find((c) => /^a/.test(c.id) && c.res === b.tech);
   const parts = w.Parts.state();
-  const said = s.entries.filter((e) => e.kind === 'line' && e.speaker === 'agent').map((e) => e.text).join(' ');
   const first = b.tech.split(/\s+/)[0];
-  const time = w.Optimiser.rules.hhmm(b.from).replace(/^0/, '');
   const price = `£${Math.round(ctx.chosen.reduce((a, i) => a + i.price, 0)).toLocaleString('en-GB')}`;
   const extrasOnCard = card && ctx.chosen.every((i) => card.l2.toLowerCase().includes(i.name.toLowerCase()));
-  const ok = !!card && extrasOnCard
-    && parts.partHolds.length + parts.orders.length > 0
-    && said.includes(`with ${first}`) && said.includes(`at ${time}`) && said.includes(price)
-    && w.App.view() === 'planner' && s.status === 'ended';
-  return { ok, got: `${b.tech} ${time}, ${ctx.chosen.length} extras ${price}, ${parts.partHolds.length} held, ${parts.orders.length} ordered. ${sum.title}` };
+  const inboundOk = !!card && extrasOnCard && parts.partHolds.length + parts.orders.length > 0
+    && said(s).includes(`with ${first}`) && said(s).includes(`at ${hhmm(b.from)}`) && said(s).includes(price) && s.status === 'ended';
+  const got = `${b.tech} ${hhmm(b.from)}, ${ctx.chosen.length} extras ${price}.`;
+
+  const swaps = w.Copilot.swaps();
+  if (setup === 'Fallback, 8:00 already free') {
+    return { ok: inboundOk && b.from === 8 && !swaps.length, got: `${got} ${swaps.length ? 'Unexpected swap request' : 'No swap request'}` };
+  }
+  if (!swaps.length) return { ok: false, got: `${got} No swap request` };
+  await w.Copilot.approveSwap(swaps[0].id, { speed: 20 });
+  const o = w.Call.state();
+  const swap = o.ctx.swap;
+  const alt = swap.alternatives[0];
+  const snap = w.Workshop.snapshot();
+  const patel = snap.cards.find((c) => c.id === swap.moved.id);
+  const mrsH = snap.cards.find((c) => c.id === swap.blocker.id);
+  const clean = w.Optimiser.rules.validate(snap, { changes: [{ kind: 'move', id: patel.id }, { kind: 'move', id: mrsH.id }] }).every((x) => x.pass);
+  const ok = inboundOk && clean && patel.from[1] === 8 && mrsH.from[0] === alt.date && mrsH.from[1] === alt.from
+    && said(o).includes(`at ${hhmm(alt.from)}`) && w.Parts.state().partHolds.length > 0 && swaps[0].state === 'done';
+  return { ok, got: `${got} Swap: Mr Patel → ${hhmm(patel.from[1])}, Mrs Hughes → ${alt.date} ${hhmm(mrsH.from[1])}, ${clean ? 'no clashes' : 'CLASH'}` };
 }
 
 // Inside the hidden frame, loading the scripts above is all this page does.

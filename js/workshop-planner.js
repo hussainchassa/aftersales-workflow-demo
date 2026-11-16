@@ -58,7 +58,15 @@ window.Workshop = (function () {
     // Not in the screenshot. Thursday bookings that set up the diagnostics matching scenario.
     { bay: 'Ramp 3', res: 'Isobel Weaver', from: ['2026-11-05', 8], to: ['2026-11-05', 13.5], l1: 'KE70 RWD - Land Rover - Discovery Sport', l2: 'Ms L Grant - Load Hours: 5.50', hrs: 5.5, tags: [] },
     { bay: 'Ramp 6', res: 'Louis TWilbourne', from: ['2026-11-05', 8], to: ['2026-11-05', 10.5], l1: 'MW19 HKP - Volvo - XC60', l2: 'Mr D Okafor - Load Hours: 2.50', hrs: 2.5, tags: [] },
-    { bay: 'Ramp 7', res: 'Justin Smith', from: ['2026-11-05', 8], to: ['2026-11-05', 9], l1: 'GY21 NBF - Skoda - Octavia', l2: 'Mrs P Hughes - Load Hours: 1.00', hrs: 1, tags: [] },
+    { bay: 'Ramp 7', res: 'Justin Smith', from: ['2026-11-05', 8], to: ['2026-11-05', 9], l1: 'LF20 KMP - Toyota - Yaris', l2: 'Mr S Ahmed - Load Hours: 1.00', hrs: 1, tags: [] },
+    // Not in the screenshot. Friday 8:00 is taken by Mrs Hughes, and every other major
+    // service technician is busy first thing, so Mr Patel's call can show a swap request.
+    // Cards with a phone number are customers the AI agent can call.
+    { bay: 'Ramp 1', res: 'John TECH Celeste', from: ['2026-11-06', 8], to: ['2026-11-06', 9.5], l1: 'GY21 NBF - Skoda - Octavia', l2: 'MOT and minor service - Mrs P Hughes - Load Hours: 1.50', hrs: 1.5, tags: [], customer: 'Mrs P Hughes', title: 'Mrs Hughes', phone: '07700 900456', job: 'MOT and minor service' },
+    { bay: 'Ramp 3', res: 'Ana Ceban', from: ['2026-11-06', 8], to: ['2026-11-06', 10.5], l1: 'PK19 TRZ - Ford - Fiesta', l2: 'Mr A Collins - Load Hours: 2.50', hrs: 2.5, tags: [] },
+    { bay: 'Ramp 6', res: 'Hugin Technician', from: ['2026-11-06', 8], to: ['2026-11-06', 10.5], l1: 'YD70 HHA - Kia - Sportage', l2: 'Ms R Doyle - Load Hours: 2.50', hrs: 2.5, tags: [] },
+    { bay: 'Ramp 7', res: 'Megan Livermore', from: ['2026-11-06', 8], to: ['2026-11-06', 10.5], l1: 'NX68 BEW - Nissan - Qashqai', l2: 'Mr T Hale - Load Hours: 2.50', hrs: 2.5, tags: [] },
+    { bay: 'Ramp 5', res: 'Megan Megan Tech', from: ['2026-11-06', 8], to: ['2026-11-06', 10], l1: 'LB21 OPC - Mazda - CX-5', l2: 'Mrs J Ward - Load Hours: 2.00', hrs: 2, tags: [] },
   ];
 
   const j = (date, l1, l2, hrs, tags) => ({ date, l1, l2, hrs, tags: tags || [] });
@@ -171,6 +179,14 @@ window.Workshop = (function () {
           id: c.id, res: c.res, bay: c.bay, from: c.from, to: c.to, hrs: c.hrs, tags: [],
           l1: c.l1, l2: `${c.l2} - Load Hours: ${c.hrs.toFixed(2)}`, [mark]: true,
         });
+      } else if (c.kind === 'move') {
+        // An existing appointment to a new time, technician and bay, e.g. one side of a swap.
+        const card = target.cards.find((x) => x.id === c.id);
+        Object.assign(card, { res: c.res, bay: c.bay, from: c.from, to: c.to, ghost: 0, [mark]: true });
+      } else if (c.kind === 'mark') {
+        // Preview only: flags a card that would move, without saying where to yet.
+        const card = target.cards.find((x) => x.id === c.id);
+        if (card) card.moving = true;
       }
     });
   }
@@ -181,8 +197,8 @@ window.Workshop = (function () {
     if (width <= 0) return '';
     const hidden = (state.filters.size && !jobMatches(c)) || (state.query && !jobMatches(c));
     const sub = state.view === 'bay' ? `${c.res} - ${c.l2}` : c.bay ? `${c.bay} - ${c.l2}` : c.l2;
-    const cls = [c.ghost ? 'ghost' : '', hidden ? 'dim' : '', c.ai ? 'ai' : '', c.prop ? 'prop' : ''].join(' ');
-    return `<div class="pl-card ${cls}" style="left:${left}px;width:${width}px" title="${esc(c.l1 + ' · ' + sub)}"><div>${esc(c.l1)}</div><div><small>${esc(sub)}</small></div></div>`;
+    const cls = [c.ghost ? 'ghost' : '', hidden ? 'dim' : '', c.ai ? 'ai' : '', c.prop ? 'prop' : '', c.moving ? 'moving' : ''].join(' ');
+    return `<div class="pl-card ${cls}" style="left:${left}px;width:${width}px" title="${esc(c.l1 + ' · ' + sub)}"><div>${c.moving ? '<b class="pl-moving">Would move</b> ' : ''}${esc(c.l1)}</div><div><small>${esc(sub)}</small></div></div>`;
   }
 
   function renderBayRows(start, days, h) {
@@ -247,7 +263,8 @@ window.Workshop = (function () {
     const start = n(state.from);
     const days = Math.max(1, n(state.to) - start + 1);
     const h = state.scale * PX_PER_SCALE;
-    const banner = state.preview ? `<div class="pl-banner"><svg class="i sm"><use href="#i-sparks"/></svg><span><b>Preview.</b> ${state.preview.count} change${state.preview.count === 1 ? '' : 's'} shown with dashed outlines. Nothing is saved yet.</span><span class="sp"></span><button class="btn s" data-a="plan-back">Back</button><button class="btn s p" data-a="plan-apply">Apply ${state.preview.count} change${state.preview.count === 1 ? '' : 's'}</button></div>` : '';
+    const banner = state.preview && state.preview.note ? `<div class="pl-banner"><svg class="i sm"><use href="#i-sparks"/></svg><span><b>Preview.</b> ${esc(state.preview.note)}</span><span class="sp"></span><button class="btn s" data-a="go-planner">Close preview</button></div>`
+      : state.preview ? `<div class="pl-banner"><svg class="i sm"><use href="#i-sparks"/></svg><span><b>Preview.</b> ${state.preview.count} change${state.preview.count === 1 ? '' : 's'} shown with dashed outlines. Nothing is saved yet.</span><span class="sp"></span><button class="btn s" data-a="plan-back">Back</button><button class="btn s p" data-a="plan-apply">Apply ${state.preview.count} change${state.preview.count === 1 ? '' : 's'}</button></div>` : '';
     mount.innerHTML = `<div class="planner">${banner}
       <div class="pl-toolbar">
         <input type="date" id="pl-from" aria-label="From date" value="${state.from}">
@@ -274,14 +291,16 @@ window.Workshop = (function () {
   /** Brings the first just-applied card into view, so a booking on another day isn't missed. */
   function reveal(grid) {
     state.reveal = false;
-    const card = grid.querySelector('.pl-card.ai');
+    const card = grid.querySelector('.pl-card.ai, .pl-card.prop');
     if (!card) return;
     const g = grid.getBoundingClientRect();
     const c = card.getBoundingClientRect();
     const left = grid.scrollLeft + (c.left - g.left) - RES_WIDTH - 60;
     const top = grid.scrollTop + (c.top - g.top) - g.height / 3;
-    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    grid.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+    // Instant, not smooth: a redraw straight after would cut a smooth scroll off halfway.
+    grid.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'auto' });
+    state.scrollLeft = grid.scrollLeft;
+    state.scrollTop = grid.scrollTop;
   }
 
   function refreshGrid(mount) {
@@ -375,11 +394,13 @@ window.Workshop = (function () {
     render(mount, false);
   }
 
-  function preview(plan) {
+  /** note: a read-only preview (e.g. a proposed swap) shows this text and can't be applied from the banner. */
+  function preview(plan, note) {
     const result = clone(live);
     applyChanges(result, plan.changes, 'prop');
-    state.preview = { result, count: plan.changes.length };
+    state.preview = { result, count: plan.changes.filter((c) => c.kind !== 'mark').length, note: note || null };
     state.view = plan.changes.every((c) => c.kind === 'hold' || c.kind === 'bay') ? 'bay' : 'tech';
+    state.reveal = true;
   }
 
   function clearPreview() { state.preview = null; }
