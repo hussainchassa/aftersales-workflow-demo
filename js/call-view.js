@@ -44,7 +44,7 @@ window.CallView = (function () {
     el.classList.remove('out');
     el.innerHTML = ringHtml(caller, false);
     clearTimeout(ringTimer);
-    ringTimer = setTimeout(() => { if (st().status === 'ringing') el.innerHTML = ringHtml(caller, true); }, 2200 / st().speed);
+    ringTimer = setTimeout(() => { if (st().status === 'ringing') el.innerHTML = ringHtml(caller, true); }, 1500 / st().speed);
   }
 
   function hideRing() {

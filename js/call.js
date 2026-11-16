@@ -13,7 +13,17 @@ window.Call = (function () {
   const AS = window.AS;
   const R = () => window.Optimiser.rules;
   const CALLER = '07700 900123';
-  const CPS = 14; // Characters a second, roughly speaking pace.
+  // Demo pacing, in milliseconds unless noted. Raise CPS to make the transcript type faster.
+  const PACE = {
+    CPS: 28, // Characters a second each line types out at. Natural speech is about 14; this is brisk for a demo.
+    minLine: 500, // Shortest time any line takes.
+    afterLine: 200, // Gap after a line before the next step.
+    beforeCustomer: 450, // Pause while the customer "speaks up".
+    beforeAgent: 250,
+    afterAction: 250,
+    ringIn: 2600, // How long an incoming call rings.
+    ringOut: 2200, // How long an outgoing call rings.
+  };
 
   /* ---------- events ---------- */
 
@@ -226,13 +236,13 @@ window.Call = (function () {
     const text = typeof step.text === 'function' ? step.text(S.ctx) : step.text;
     S.speaking = step.say;
     emit('speaking', { speaker: step.say });
-    await sleep(step.say === 'customer' ? 900 : 500, run);
-    const ms = Math.max(900, (text.length / CPS) * 1000);
+    await sleep(step.say === 'customer' ? PACE.beforeCustomer : PACE.beforeAgent, run);
+    const ms = Math.max(PACE.minLine, (text.length / PACE.CPS) * 1000);
     const entry = { kind: 'line', speaker: step.say, text, ms: ms / S.speed, at: elapsed() };
     S.entries.push(entry);
     S.speaking = null;
     emit('line', entry);
-    await sleep(ms + 350, run);
+    await sleep(ms + PACE.afterLine, run);
   }
 
   async function playTool(step, run) {
@@ -246,7 +256,7 @@ window.Call = (function () {
     entry.done = true;
     entry.note = step.note ? step.note(S.ctx, result) : entry.note;
     emit('update', entry);
-    await sleep(400, run);
+    await sleep(PACE.afterAction, run);
   }
 
   function summary() {
@@ -277,7 +287,7 @@ window.Call = (function () {
   async function play(run, caller, direction, steps) {
     Object.assign(S, { status: 'ringing', direction, entries: [], speaking: null, startedAt: 0, endedAt: 0, paused: false, pausedAt: 0, pausedTotal: 0, caller });
     emit('ringing', caller);
-    await sleep(direction === 'outbound' ? 3000 : 3600, run);
+    await sleep(direction === 'outbound' ? PACE.ringOut : PACE.ringIn, run);
     S.status = 'live';
     S.startedAt = now();
     emit('answered', caller);

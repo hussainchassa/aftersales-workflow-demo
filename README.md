@@ -40,7 +40,7 @@ A question for the other app gets a short reply saying where to ask it.
 
   Each action is marked in the transcript as it happens. When the job is booked, the planner shows it, and a strip follows the rest of the call. The copilot then posts a call summary.
 
-  Pause and Restart sit under the transcript. Restart puts the diary and parts back as they were when the phone rang. The call is scripted and silent, with about three minutes of real-time conversation; in a live demo, a voice provider would drive the same screens.
+  Pause and Restart sit under the transcript. Restart puts the diary and parts back as they were when the phone rang. The call is scripted and silent, and plays at a brisk demo pace (about 90 seconds; tune `PACE` in `js/call.js`); in a live demo, a voice provider would drive the same screens.
 - **Swapping into a preferred time:** this is part of the same call story.
   1. Mr Patel asks for Friday at 8:00, but it's taken by Mrs Hughes's MOT and minor service.
   2. The agent books the earliest good fit (09:30 with John) and logs 8:00 as his first choice.
