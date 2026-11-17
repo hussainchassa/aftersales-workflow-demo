@@ -207,3 +207,47 @@ Everything the agent does is visible, as in the earlier call demos.
 - **The exact sample repair orders, customers, cars, technicians, prices and counts,** shaped so the story plays as described.
 - **Visual details of the two screens,** following the screenshots and the prototype's existing style.
 - **The script wording,** following the earlier calls' tone.
+
+## Revision, 2026-11-17: Recommended Work as it really works (short)
+
+Status: approved 2026-11-17
+
+New screenshots showed that the DMS Recommended Work tab isn't a finding card. It's a working area with its own sections. Keep it simple: mirror that layout, and put the one click on the item's row.
+
+- **The tab's layout, after the screenshots:**
+  - **A row of icons:** heart, refresh, forward arrow and thumbs-down. They're decorative.
+  - **A totals table** with three rows, each excluding and including tax:
+    - Recommended Work Cost Total
+    - Current Account Repair Order Total
+    - Overall Account Total
+  - **Linked Account** ("RET01 - Repair Order") and **Search Account**, both inert.
+  - **Three sections:** **Awaiting Parts**, **Awaiting Labor** and **Awaiting Approval**. Each is a table with these columns:
+    - a checkbox
+    - Description
+    - Checklist
+    - Account
+    - Labor
+    - Parts
+    - Available
+    - Alternatives
+    - Non-Labor
+    - Total
+    - Total (With Tax)
+    - Identified By
+    - row icons
+
+    Each section has its toolbar (forward arrow, thumbs-down, back and forward arrows, **+** and the parts icon, all inert) and a "Total Cost" line. An empty section says "No items to show."
+- **Mrs Shaw's item sits in Awaiting Parts,** as the technician left it:
+  - "Front brake pads and discs - Measured 2 mm, red"
+  - Default Checklist, RET01, all values 0.00
+  - Identified By Ana Ceban
+
+  *(My call:)* two zero-value checklist rows sit in Awaiting Labor for realism, like the screenshot's eVHC and tread depth rows.
+- **The one click:** a **Get approval and order** button on her row. It replaces the old card and its button. Clicking it:
+  1. **The agent prices the item first,** as a step in the transcript. It fills in the parts from the catalogue (front pads and discs, "on order Thu"), the labour (2.2 h) and the totals. The row moves to **Awaiting Approval**. These are the clicks the DMS makes you do by hand: Parts Details, part search, add part, labour, move along.
+  2. **Then the approval call plays as already built.** On her yes, the item leaves Recommended Work and becomes requirement C on Repair Details, the parts are ordered, and Monday is booked. One change, with one Undo.
+  3. **A short green note** at the top of the tab says it was approved on the call and links to Repair Details and the booking.
+- **Totals follow the items:** the Recommended Work Cost Total rises when it's priced and drops back to 0 once it's approved. The repair order total rises by the approved amount.
+- **Undo** puts the item back in Awaiting Approval, priced, and removes the repair order lines, the orders and the booking. **Restart** goes back to how things were before the click, with the item in Awaiting Parts.
+- **Not included:** the Add Recommended Work dialog, the Parts Details window, or moving items between sections by hand.
+- **Tests:** the existing parts order checks, plus checks that the row moved from Awaiting Parts to Awaiting Approval before the call and is gone after approval. All 60 checks still pass.

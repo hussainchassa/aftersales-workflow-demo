@@ -40,11 +40,18 @@ window.RepairOrders = (function () {
         part('OIL-5L - Engine oil, 5 litres', 1, 38, 'Issued'), part('FILTER-OIL - Oil filter', 1, 14, 'Issued'), env(4.5),
         req('B', 'Vehicle health check'), op('2', 'Carry out VHC', 0.5, 'RET01'), labor(72.35),
       ],
-      findings: [{
-        id: 'f1', title: 'Front brake pads and discs', note: 'Measured 2 mm, red. Replace before driving any distance.', severity: 'red',
-        by: 'Ana Ceban', at: '09:15', op: 'Replace front brake pads and discs', type: 'Brakes', hours: 2.2,
-        parts: [['PAD-F-XC40', 1], ['DISC-F-XC40', 1]], status: 'recommended',
-      }],
+      // Recommended Work, as the DMS lays it out: each item sits in Awaiting Parts, Awaiting
+      // Labor or Awaiting Approval until it's approved and becomes a requirement on Repair Details.
+      findings: [
+        {
+          id: 'f1', title: 'Front brake pads and discs', note: 'Measured 2 mm, red. Replace before driving any distance.', severity: 'red',
+          by: 'Ana Ceban', at: '09:15', op: 'Replace front brake pads and discs', type: 'Brakes', hours: 2.2,
+          parts: [['PAD-F-XC40', 1], ['DISC-F-XC40', 1]], status: 'recommended', section: 'parts', checklist: 'Default Checklist', priced: null,
+        },
+        // Checklist lines the technician left at zero, like the DMS shows.
+        { id: 'f2', title: 'eVHC START - Ana Ceban -', checklist: 'Default Checklist', by: 'Ana Ceban', status: 'info', section: 'labor', parts: [], hours: 0, priced: { labor: 0, parts: 0, nonLabor: 0 } },
+        { id: 'f3', title: 'TREAD DEPTH - O/S Rear -', checklist: 'Default Checklist', by: 'Ana Ceban', status: 'info', section: 'labor', parts: [], hours: 0, priced: { labor: 0, parts: 0, nonLabor: 0 } },
+      ],
     },
     { id: 71146, customer: 'Oakfield Motors Ltd', reg: 'YF14 KNM', vin: 'WP0ZZZ99ZES130ABC', vehicle: 'BMW X4 M (F98) X4 M Competition LCI S58T 3.0 (X4CP)', account: 'THR01 - THR Warranty Account', out: ['2026-11-05', 10] },
     { id: 71307, customer: 'Harlow Electrical Supplies', reg: 'V99 LLB', vin: 'WF0XXXGCDXLB71307', vehicle: 'Ford Focus 1.5 EcoBlue ST-Line Hatchback 5dr Diesel Manual Euro 6 (s/s) (120 ps)', account: 'THR01 - THR Warranty Account', out: ['2026-11-05', 12] },
@@ -90,6 +97,20 @@ window.RepairOrders = (function () {
     return Math.round((partsCost + f.hours * rate()) * (1 + VAT));
   }
 
+  /** The prices a recommended item would carry once it's priced: parts from the catalogue, labour at the Service rate. */
+  function quote(f) {
+    return { labor: money(f.hours * rate()), parts: money(f.parts.reduce((a, [p, qty]) => a + window.Parts.price(p) * qty, 0)), nonLabor: 0 };
+  }
+
+  const itemTotal = (f) => (f.priced ? money(f.priced.labor + f.priced.parts + f.priced.nonLabor) : 0);
+
+  /** The Recommended Work totals table: still-recommended work, this repair order, and both together. */
+  function recommendedTotals(ro) {
+    const rec = money(ro.findings.filter((f) => f.section !== 'approved').reduce((a, f) => a + itemTotal(f), 0));
+    const cur = totals(ro).sub;
+    return { rec, recTax: money(rec * (1 + VAT)), cur, curTax: money(cur * (1 + VAT)), all: money(rec + cur), allTax: money((rec + cur) * (1 + VAT)) };
+  }
+
   /* ---------- changing ---------- */
 
   /**
@@ -99,10 +120,15 @@ window.RepairOrders = (function () {
    */
   function apply(changes) {
     (changes || []).forEach((c) => {
-      if (c.kind !== 'approve') return;
       const ro = get(c.roId);
       const f = ro && ro.findings.find((x) => x.id === c.findingId);
       if (!f) return;
+      if (c.kind === 'price') {
+        // Parts and labour filled in, so the item moves along to Awaiting Approval.
+        Object.assign(f, { priced: quote(f), section: 'approval' });
+        return;
+      }
+      if (c.kind !== 'approve') return;
       const letter = String.fromCharCode(65 + ro.lines.filter((l) => l.kind === 'requirement').length);
       const opNo = String(ro.lines.filter((l) => l.kind === 'operation').length + 1);
       const day = AS.dateOf(AS.toN(c.arrives)).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
@@ -114,12 +140,12 @@ window.RepairOrders = (function () {
       ];
       ro.lines.forEach((l) => { delete l.isNew; });
       ro.lines.push(...added);
-      Object.assign(f, { status: 'approved', approvedBy: c.by, booking: c.booking, requirement: letter });
+      Object.assign(f, { status: 'approved', section: 'approved', approvedBy: c.by, booking: c.booking, requirement: letter });
     });
   }
 
   return {
-    list: () => state, get, totals, rollup, findingPrice, apply, VAT,
+    list: () => state, get, totals, rollup, findingPrice, quote, itemTotal, recommendedTotals, apply, VAT,
     snapshot: () => clone(state), restore: (s) => { state = clone(s); },
   };
 })();

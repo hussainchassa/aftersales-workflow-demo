@@ -305,6 +305,7 @@ const PARTS_SETUPS = {
 async function checkApproval(w) {
   const RO = w.RepairOrders;
   const before = RO.totals(RO.get(71512)).total;
+  const startSection = RO.get(71512).findings[0].section;
   const sum = await w.Call.startApproval(71512, { speed: 25 });
   const s = w.Call.state();
   const ctx = s.ctx;
@@ -320,13 +321,13 @@ async function checkApproval(w) {
   const card = snap.cards.find((c) => c.id === 'r71512');
   const clean = w.Optimiser.rules.validate(snap, { changes: [{ kind: 'appointment', id: 'r71512' }] }).every((x) => x.pass);
   const brakesTechs = w.Matching.stats('Brakes').map((x) => x.tech);
-  const ok = ro.findings[0].status === 'approved' && ro.lines.some((l) => l.isNew && l.kind === 'requirement')
+  const ok = startSection === 'parts' && ro.findings[0].section === 'approved' && ro.findings[0].status === 'approved' && ro.lines.some((l) => l.isNew && l.kind === 'requirement')
     && Math.abs(added - ctx.price) < 1 && orders.length === 2 && orders.every((o) => o.kind === 'order')
     && card && card.from[0] > arrives && clean && brakesTechs.includes(card.res)
     && said.includes(`£${ctx.price}`) && said.includes(`at ${hhmm(slot.from)}`) && said.includes(slot.tech.split(' ')[0]);
   w.Copilot.undoPlan();
   const after = RO.get(71512);
-  const undone = after.findings[0].status === 'recommended' && Math.abs(RO.totals(after).total - before) < 0.01
+  const undone = after.findings[0].status === 'recommended' && after.findings[0].section === 'approval' && !!after.findings[0].priced && Math.abs(RO.totals(after).total - before) < 0.01
     && !w.Workshop.snapshot().cards.some((c) => c.id === 'r71512') && !w.Parts.state().orders.some((o) => /XC40/.test(o.part));
   return { ok: ok && undone, got: `£${ctx.price} added (${added.toFixed(2)}), parts arrive ${arrives}, return ${card.from[0]} ${hhmm(card.from[1])} with ${card.res}, ${clean ? 'no clashes' : 'CLASH'}, undo ${undone ? 'reverses it all' : 'FAILED'}` };
 }

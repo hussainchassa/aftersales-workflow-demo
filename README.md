@@ -51,10 +51,12 @@ A question for the other app gets a short reply saying where to ask it.
   Only the "yes" path is shown. If the other customer said no or didn't answer, nothing would move and nobody would be told. If 8:00 happens to be free already, the agent simply books it.
 - **One-click parts order from the job card:** Service has simple copies of the DMS **Repair Order Progress (Detailed)** board and the **repair order** page (Repair Details and Recommended Work tabs). In the real system, adding and ordering a part takes 7–8 clicks. Here it takes one.
   1. Under Work In Progress, expand **Work In Progress** and open Mrs Shaw's Volvo XC40 (repair order 71512). It's marked "Recommended work".
-  2. Recommended Work shows the technician's finding: front pads and discs at 2 mm, £660 including VAT, with the parts arriving Thursday from the supplier.
-  3. Click **Get approval and order**. The AI agent phones Mrs Shaw. She approves, can't leave the car, and asks for Monday morning.
+  2. Recommended Work is laid out like the DMS: a totals table, the linked account, then **Awaiting Parts**, **Awaiting Labor** and **Awaiting Approval**. The technician's finding, front pads and discs at 2 mm, sits in Awaiting Parts, not yet priced.
+  3. Click **Get approval and order** on that row. The agent first prices it (parts from the catalogue, 2.2 hours of labour, £660 including VAT), so it moves to Awaiting Approval. Then it phones Mrs Shaw. She approves, can't leave the car, and asks for Monday morning.
   4. The agent adds the work to Repair Details as an approved requirement (parts "On order"), orders the parts, and books the return visit on Monday with a brakes technician from matching, all as one change with one Undo.
-  5. She's sent a confirmation text.
+  5. She's sent a confirmation text. The item leaves the Awaiting sections and a green note links to Repair Details and the planner.
+
+  Undo puts the item back in Awaiting Approval, still priced. Restart on the call goes back to Awaiting Parts.
 
   Restart on any call now replays just that call, and leaves the other stories' messages in the chat.
 

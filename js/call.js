@@ -116,6 +116,10 @@ window.Call = (function () {
       return ctx.swapped;
     },
     /* The one-click parts order (Mrs Shaw). */
+    async price_work(ctx) {
+      if (!ctx.finding.priced) window.RepairOrders.apply([{ kind: 'price', roId: ctx.ro.id, findingId: ctx.finding.id }]);
+      return ctx.finding.priced;
+    },
     async check_parts(ctx) {
       const today = snap().today;
       const far = AS.toIso(AS.toN(today) + 10);
@@ -284,6 +288,7 @@ window.Call = (function () {
     S.ctx.returnDate = AS.toIso(mon);
     const weekday = (iso) => AS.dateOf(AS.toN(iso)).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
     return [
+      { tool: 'price_work', working: 'Pricing the recommended work', note: (ctx) => `Agent priced the work: parts £${Math.round(ctx.finding.priced.parts)} from the catalogue, ${f.hours} h labour · moved to Awaiting Approval` },
       { say: 'agent', text: `Hello, is that ${title}? I'm the AI assistant from the service team, calling about your ${carName}, which is in with us today.` },
       { say: 'customer', text: 'Yes, speaking. Is everything OK?' },
       { tool: 'check_parts', working: 'Checking the parts for the brakes', note: (ctx) => `Agent checked the parts: ${ctx.sources.map((x) => window.Parts.name(x.part).replace(/^./, (c) => c.toLowerCase())).join(' and ')} · ${ctx.allShelf ? 'on the shelf' : `none in stock, supplier delivers ${weekday(ctx.arrives)}`}` },
@@ -435,7 +440,13 @@ window.Call = (function () {
     S.ctx = { kind: 'approval', ro, finding, price: window.RepairOrders.findingPrice(finding) };
     const known = window.Vehicles.lookupCaller(ro.phone) || {};
     const caller = Object.assign(known, { name: ro.customer, title: known.title || ro.customer, phone: ro.phone });
-    return guarded(() => play(run, caller, 'outbound', () => approvalScript(ro, finding)));
+    return guarded(async () => {
+      // The clicks the DMS makes you do by hand: parts and labour filled in, so the row moves to Awaiting Approval.
+      await TOOLS.price_work(S.ctx);
+      if (window.App.view() === 'ro') window.App.showRo(ro.id, 'Recommended Work');
+      await sleep(1400, run);
+      return play(run, caller, 'outbound', () => approvalScript(ro, finding));
+    });
   }
 
   /** Starts the simulated call. Resolves when it ends, or when it's restarted. */
