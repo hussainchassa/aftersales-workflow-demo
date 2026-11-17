@@ -51,6 +51,8 @@ A question for the other app gets a short reply saying where to ask it.
   Only the "yes" path is shown. If the other customer said no or didn't answer, nothing would move and nobody would be told. If 8:00 happens to be free already, the agent simply books it.
 - **One-click parts order from the job card:** Service has simple copies of the DMS **Repair Order Progress (Detailed)** board and the **repair order** page (Repair Details and Recommended Work tabs). In the real system, adding and ordering a part takes 7–8 clicks. Here it takes one.
   1. Under Work In Progress, expand **Work In Progress** and open Mrs Shaw's Volvo XC40 (repair order 71512). It's marked "Recommended work".
+
+     Or ask Service's AI Assistance, e.g. "Any unapproved part requests or work recommendations?". It lists what's waiting for the customer's approval, with **Open Recommended Work** to go straight there. After approval, the same card shows it as approved.
   2. Recommended Work is laid out like the DMS: a totals table, the linked account, then **Awaiting Parts**, **Awaiting Labor** and **Awaiting Approval**. The technician's finding, front pads and discs at 2 mm, sits in Awaiting Parts, not yet priced.
   3. Click **Get approval and order** on that row. The agent first prices it (parts from the catalogue, 2.2 hours of labour, £660 including VAT), so it moves to Awaiting Approval. Then it phones Mrs Shaw. She approves, can't leave the car, and asks for Monday morning.
   4. The agent adds the work to Repair Details as an approved requirement (parts "On order"), orders the parts, and books the return visit on Monday with a brakes technician from matching, all as one change with one Undo.
@@ -92,7 +94,7 @@ Type the registration in the booking form, then click "Next".
 | KY72 BLN | Any job | Nothing due or outstanding |
 | Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
 
-Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It also plays the one-click parts order, from a fresh load and after the Patel story, checks the repair order, parts, return visit and the agent's words, and checks Undo reverses it all. It should say "60 of 60 passed".
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It also plays the one-click parts order, from a fresh load and after the Patel story, checks the repair order, parts, return visit and the agent's words, and checks Undo reverses it all. Before that, it asks the copilot for unapproved work and checks its button opens the same Recommended Work screen. It should say "62 of 62 passed".
 
 ### Questions to try
 
@@ -108,6 +110,7 @@ In Service:
 - Simulate incoming call
 - Book an appointment
 - What's coming up in the planner?
+- Any recommended work waiting for approval?
 - Fix my workbays and technicians (then "do it" to approve, "undo" to reverse)
 
 ## How it works

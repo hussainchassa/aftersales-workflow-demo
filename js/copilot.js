@@ -27,6 +27,7 @@ window.Copilot = (function () {
       ['Book an appointment', 'calendar'],
       ['Fix my workbays and technicians', 'tools'],
       ["What's coming up in the planner?", 'clock'],
+      ['Any recommended work waiting for approval?', 'invoice'],
     ],
     bi: [
       ['How is my aftersales performing?', 'chart'],
@@ -50,7 +51,7 @@ window.Copilot = (function () {
 
   /* ---------- which app a question belongs to ---------- */
 
-  const SERVICE_KINDS = ['optimise', 'approve', 'undo', 'book', 'nav'];
+  const SERVICE_KINDS = ['optimise', 'approve', 'undo', 'book', 'nav', 'pending'];
   const isCapacity = (r) => r.kind === 'dashboard' && r.state.topics.length === 1 && r.state.topics[0] === 'capacity';
   function belongsTo(r) {
     if (SERVICE_KINDS.includes(r.kind) || isCapacity(r)) return 'service';
@@ -142,6 +143,7 @@ window.Copilot = (function () {
         <div class="safe">${ic('info', 'sm')}Simulated call. Nothing leaves this demo.</div></div>`;
     }
     if (m.kind === 'swap') return swapHtml(m);
+    if (m.kind === 'pending') return pendingHtml(m);
     if (m.kind === 'booking-form') return bookingFormHtml(m);
     if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
@@ -472,6 +474,9 @@ window.Copilot = (function () {
         undoPlan();
       } else if (result.kind === 'book') {
         openBooking();
+      } else if (result.kind === 'pending') {
+        // Keep which items were waiting when asked; the card shows their current state each time it's drawn.
+        S.messages.push({ role: 'a', kind: 'pending', items: window.RepairOrders.pending().map(({ ro, f }) => [ro.id, f.id]) });
       } else if (result.kind === 'nav') {
         S.messages.push({ role: 'a', text: result.text });
         window.App.showPlanner();
@@ -978,6 +983,31 @@ window.Copilot = (function () {
     const nowH = DEMO_NOW + (Date.now() - m.created) / 3600000;
     const left = Math.max(0, m.swap.deadline - nowH);
     return `${Math.floor(left)}h ${String(Math.floor((left % 1) * 60)).padStart(2, '0')}m`;
+  }
+
+  /** Recommended work waiting on the customer, each with a way into its repair order's Recommended Work tab. */
+  function pendingHtml(m) {
+    const RO = window.RepairOrders;
+    const SECTION = { parts: 'Awaiting Parts', labor: 'Awaiting Labor', approval: 'Awaiting Approval' };
+    if (!m.items.length) {
+      return `<div class="msg-a col"><span>Nothing is waiting for approval. Every recommended job on today's repair orders has been approved or declined.</span></div>`;
+    }
+    const rows = m.items.map(([roId, fId]) => {
+      const ro = RO.get(roId);
+      const f = ro.findings.find((x) => x.id === fId);
+      const price = f.priced ? `£${Math.round(RO.itemTotal(f) * (1 + RO.VAT))} incl. VAT` : `not priced yet, about £${RO.findingPrice(f)} incl. VAT`;
+      const where = f.status === 'approved'
+        ? `<span class="pend-ok">${ic('check', 'sm')} Approved by ${esc(ro.customer)}</span>`
+        : `<button class="btn s p" data-a="ro-open" data-v="${ro.id}">Open Recommended Work ${ic('right', 'sm')}</button>`;
+      return `<li><div><b>${esc(ro.customer)} · ${esc(ro.reg)}</b><span class="xs muted">Repair order ${ro.id}</span>
+        <span class="sm">${esc(f.title)}${f.note ? `: ${esc(f.note.split('.')[0])}` : ''}</span>
+        <span class="xs muted">${f.status === 'approved' ? 'Added to Repair Details' : `${SECTION[f.section]} · ${price}`}</span></div>${where}</li>`;
+    }).join('');
+    const n = m.items.length;
+    return `<div class="ccard"><div class="bk-h">Waiting for approval</div>
+      <div class="c-result">${n === 1 ? '1 recommended job is' : `${n} recommended jobs are`} waiting for the customer to approve</div>
+      <ul class="pend">${rows}</ul>
+      <div class="safe">${ic('lock', 'sm')}Opening it changes nothing. Get approval and order starts the call from there.</div></div>`;
   }
 
   function swapHtml(m) {

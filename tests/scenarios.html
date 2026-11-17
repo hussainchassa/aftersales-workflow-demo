@@ -210,13 +210,16 @@ async function run() {
   for (const [setup, prep] of Object.entries(PARTS_SETUPS)) {
     const f = await freshApp();
     const w = f.contentWindow;
-    let res;
-    try { await prep(w); res = await checkApproval(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
-    total++; if (res.ok) pass++;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${setup}</td><td>One-click parts order</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
-    tr.lastChild.textContent = res.got || '';
-    rows.appendChild(tr);
+    // The copilot route in first, then the approval itself, on the same copy of the app.
+    for (const [name, check] of [['Asking the copilot for unapproved work', checkPendingRoute], ['One-click parts order', checkApproval]]) {
+      let res;
+      try { if (check === checkPendingRoute) await prep(w); res = await check(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+      total++; if (res.ok) pass++;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${setup}</td><td>${name}</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
+      tr.lastChild.textContent = res.got || '';
+      rows.appendChild(tr);
+    }
     f.remove();
   }
 
@@ -300,6 +303,18 @@ const PARTS_SETUPS = {
     if (s) await w.Copilot.approveSwap(s.id, { speed: 25 });
   },
 };
+
+/** Asks Service's copilot for unapproved work and follows its button to the same Recommended Work screen. */
+async function checkPendingRoute(w) {
+  await w.Copilot.send('Any unapproved part requests or work recommendations?');
+  const btns = [...w.document.querySelectorAll('.pend [data-a="ro-open"]')];
+  if (btns.length !== 1 || btns[0].dataset.v !== '71512') return { ok: false, got: `Buttons: ${btns.map((b) => b.dataset.v).join(', ') || 'none'}` };
+  btns[0].click();
+  const tab = w.document.querySelector('.ro-tabs .on');
+  const go = w.document.querySelector('.rw-go[data-v="71512"]');
+  const ok = w.App.view() === 'ro' && tab && tab.textContent === 'Recommended Work' && !!go;
+  return { ok, got: `Listed 71512, opened ${w.App.view()} on ${tab ? tab.textContent : 'no tab'}, ${go ? 'Get approval and order ready' : 'NO BUTTON'}` };
+}
 
 /** Plays Mrs Shaw's approval call fast, checks everything landed and matches what was said, then undoes it. */
 async function checkApproval(w) {

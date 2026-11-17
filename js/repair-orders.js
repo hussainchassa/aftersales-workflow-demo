@@ -68,6 +68,9 @@ window.RepairOrders = (function () {
 
   const get = (id) => state.find((ro) => ro.id === Number(id)) || null;
 
+  /** Recommended work the customer hasn't approved yet, across every repair order. */
+  const pending = () => state.flatMap((ro) => ro.findings.filter((f) => f.status === 'recommended').map((f) => ({ ro, f })));
+
   /** Invoice figures worked out from the lines, as on the DMS totals row. */
   function totals(ro) {
     const sum = (kinds) => ro.lines.filter((l) => kinds.includes(l.kind)).reduce((a, l) => a + (l.price || 0), 0);
@@ -145,7 +148,7 @@ window.RepairOrders = (function () {
   }
 
   return {
-    list: () => state, get, totals, rollup, findingPrice, quote, itemTotal, recommendedTotals, apply, VAT,
+    list: () => state, get, pending, totals, rollup, findingPrice, quote, itemTotal, recommendedTotals, apply, VAT,
     snapshot: () => clone(state), restore: (s) => { state = clone(s); },
   };
 })();

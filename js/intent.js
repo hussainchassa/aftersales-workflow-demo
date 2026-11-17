@@ -154,6 +154,8 @@ window.Intent = (function () {
     }
     if (/^(yes|yep|apply( it| the plan)?|do it|go ahead|approve( it)?|confirm)\b/.test(t)) return { kind: 'approve' };
     if (/^undo\b/.test(t)) return { kind: 'undo' };
+    // Recommended work and part requests still waiting on the customer, from the repair orders.
+    if (/\b(unapproved|not (yet )?approved|(awaiting|waiting (for|on)) (customer )?approval|pending approvals?|recommended work|work recommendations?|recommendations|parts? requests?)\b/.test(t)) return { kind: 'pending' };
     if (/\b(book|make|new|schedule|take)\b.*\b(appointment|booking)s?\b/.test(t) || /^book (a |an )?(job|car|vehicle|service|customer)\b/.test(t)) return { kind: 'book' };
     const bayWord = /work ?bays?|\bbays?\b|\bramps?\b/.test(t);
     const techWord = /technicians?|\btechs?\b|unallocated/.test(t);

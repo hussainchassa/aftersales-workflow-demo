@@ -197,6 +197,12 @@
 /* Improvement plan */
 .c-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .c-log { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 17px; color: var(--ink-2); }
+/* Recommended work waiting for approval, listed in the chat */
+.pend { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; padding: 0; list-style: none; }
+.pend li { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--brand-50); border-radius: 8px; }
+.pend li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pend .btn { align-self: flex-start; }
+.pend-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--ok); }
 .c-result svg { color: var(--ok); vertical-align: -2px; }
 .plan-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .plan-sum .kpi-n { font-size: 24px; }
