@@ -34,7 +34,13 @@ window.App = (function () {
     ] },
     { id: 'bookings', label: 'Bookings', icon: 'tools', children: [] },
     { id: 'jobs', label: 'Jobs', icon: 'clip', children: [] },
-    { id: 'progress', label: 'Job Progress', icon: 'progress', children: [] },
+    { id: 'roprogress', label: 'Repair Order Progress', icon: 'progress', open: true, children: [
+      { id: 'operation', label: 'Operation', children: [] },
+      { id: 'roparent', label: 'Repair Order', open: true, children: [
+        { id: 'detailed', label: 'Detailed', view: 'ro-progress' },
+        { id: 'rotoday', label: 'Today' },
+      ] },
+    ] },
     { id: 'invoicing', label: 'Invoicing', icon: 'invoice', children: [] },
     { id: 'time', label: 'Time Analysis', icon: 'clock', children: [] },
     { id: 'reporting', label: 'Reporting', icon: 'report', children: [] },
@@ -69,7 +75,8 @@ window.App = (function () {
   function navHtml(list, level) {
     return list.map((n) => {
       const hasKids = !!n.children;
-      const active = (n.view === 'planner' && S.view === 'planner') || (n.view === 'dashboard' && S.view === 'dashboard' && S.dash && S.dash.seq === n.seq);
+      const active = n.view === 'dashboard' ? S.view === 'dashboard' && S.dash && S.dash.seq === n.seq
+        : !!n.view && (n.view === S.view || (n.view === 'ro-progress' && S.view === 'ro'));
       const cls = ['nv', level ? `l${level + 1}` : '', n.open && hasKids ? 'open' : '', active ? 'on' : ''].join(' ');
       const chev = hasKids ? ic(n.open ? 'down' : 'right', 'chev') : '';
       const kids = hasKids && n.open ? navHtml(n.children, level + 1) : '';
@@ -108,6 +115,10 @@ window.App = (function () {
       c.innerHTML = `<span>Service</span>${sep}<span>Planning</span>${sep}<b>Improvement plan</b>`;
     } else if (S.view === 'planner') {
       c.innerHTML = `<span>Service</span>${sep}<span>Planning</span>${sep}<span>Planner</span>${sep}<b>Technician</b>`;
+    } else if (S.view === 'ro-progress') {
+      c.innerHTML = `<span>Service</span>${sep}<span>Repair Order Progress</span>${sep}<span>Repair Order</span>${sep}<b>Detailed</b>`;
+    } else if (S.view === 'ro') {
+      c.innerHTML = `<span>Service</span>${sep}<span>Repair Order Progress</span>${sep}<span>Repair Order</span>${sep}<button data-a="nav" data-v="detailed">Detailed</button>${sep}<b>${S.ro.id} - ${esc(S.ro.tab)}</b>`;
     } else if (S.view === 'bi-home') {
       c.innerHTML = '<b>BI</b>';
     } else {
@@ -154,6 +165,8 @@ window.App = (function () {
       if (last === 'dashboard' && S.dash) showDashboard(S.dash.state, S.dash.spec, 'instant', S.dash.seq);
       else showBiHome();
     } else if (last === 'call' && window.Call && window.Call.state().caller) showCall();
+    else if (last === 'ro-progress') showRoProgress();
+    else if (last === 'ro' && S.ro) showRo(S.ro.id, S.ro.tab);
     else if (last === 'plan' && window.Copilot.plan()) showPlan();
     else showPlanner();
     if (S.chatOpen[app]) window.Copilot.setOpen(true);
@@ -173,6 +186,31 @@ window.App = (function () {
   function showPlanner() {
     S.view = 'planner';
     window.Workshop.render(main, false);
+    renderNav();
+    renderCrumb();
+    window.Copilot.setContext();
+    syncCall();
+  }
+
+  function showRoProgress() {
+    S.view = 'ro-progress';
+    window.Workshop.clearPreview();
+    window.RepairOrderView.renderProgress(main);
+    renderNav();
+    renderCrumb();
+    window.Copilot.setContext();
+    syncCall();
+  }
+
+  /** A repair order opens on Recommended Work while it has some waiting, otherwise on Repair Details. */
+  function showRo(id, tab) {
+    const ro = window.RepairOrders.get(id);
+    if (!ro) { toast('Not part of this prototype'); return; }
+    const pending = ro.findings.some((f) => f.status === 'recommended');
+    S.view = 'ro';
+    S.ro = { id: ro.id, tab: tab || (pending ? 'Recommended Work' : 'Repair Details') };
+    window.Workshop.clearPreview();
+    window.RepairOrderView.renderRo(main, S.ro.id, S.ro.tab);
     renderNav();
     renderCrumb();
     window.Copilot.setContext();
@@ -245,6 +283,7 @@ window.App = (function () {
       const n = find(el.dataset.v);
       if (!n) return;
       if (n.view === 'planner') { showPlanner(); return; }
+      if (n.view === 'ro-progress') { showRoProgress(); return; }
       if (n.view === 'dashboard') { window.Copilot.reopen(n.seq); return; }
       if (document.getElementById('shell').classList.contains('mini')) document.getElementById('collapse').click();
       if (n.children && n.children.length) { n.open = !n.open; renderNav(); return; }
@@ -274,6 +313,10 @@ window.App = (function () {
     'call-pause': () => window.Call.togglePause(),
     'call-restart': () => window.Call.restart(),
     'call-take': () => toast('Not part of this prototype'),
+    'ro-expand': () => { window.RepairOrderView.toggleWip(); showRoProgress(); },
+    'ro-open': (el) => showRo(el.dataset.v),
+    'ro-tab': (el) => { if (el.dataset.off) toast('Not part of this prototype'); else showRo(S.ro.id, el.dataset.v); },
+    'ro-approve': (el) => window.Call.startApproval(el.dataset.v),
     'swap-approve': (el) => window.Copilot.approveSwap(el.dataset.m),
     'swap-preview': (el) => window.Copilot.previewSwap(el.dataset.m),
     'swap-decline': (el) => window.Copilot.declineSwap(el.dataset.m),
@@ -312,7 +355,7 @@ window.App = (function () {
   });
 
   return {
-    view: () => S.view, app: () => S.app, toast, showPlanner, showDashboard, showPlan, showCall, showLauncher, openApp, addReport, refresh,
+    view: () => S.view, app: () => S.app, toast, showPlanner, showDashboard, showPlan, showCall, showLauncher, openApp, addReport, refresh, showRoProgress, showRo,
     start() {
       const params = new URLSearchParams(location.search);
       // Presenter links: ?app=service or ?app=bi open an app; ?ask= goes to BI, ?call=1 to Service.
@@ -322,6 +365,9 @@ window.App = (function () {
       if (app === 'service' || app === 'bi') openApp(app); else showLauncher();
       if (ask) window.Copilot.send(ask);
       if (call) window.Call.start();
+      // ?app=service&ro=71512 opens a repair order directly, e.g. Mrs Shaw's for the parts order story.
+      const ro = params.get('ro');
+      if (ro && S.app === 'service') showRo(ro);
     },
   };
 })();

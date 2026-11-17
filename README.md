@@ -49,6 +49,14 @@ A question for the other app gets a short reply saying where to ask it.
   5. Mr Patel is sent a message with his new time.
 
   Only the "yes" path is shown. If the other customer said no or didn't answer, nothing would move and nobody would be told. If 8:00 happens to be free already, the agent simply books it.
+- **One-click parts order from the job card:** Service has simple copies of the DMS **Repair Order Progress (Detailed)** board and the **repair order** page (Repair Details and Recommended Work tabs). In the real system, adding and ordering a part takes 7–8 clicks. Here it takes one.
+  1. Under Work In Progress, expand **Work In Progress** and open Mrs Shaw's Volvo XC40 (repair order 71512). It's marked "Recommended work".
+  2. Recommended Work shows the technician's finding: front pads and discs at 2 mm, £660 including VAT, with the parts arriving Thursday from the supplier.
+  3. Click **Get approval and order**. The AI agent phones Mrs Shaw. She approves, can't leave the car, and asks for Monday morning.
+  4. The agent adds the work to Repair Details as an approved requirement (parts "On order"), orders the parts, and books the return visit on Monday with a brakes technician from matching, all as one change with one Undo.
+  5. She's sent a confirmation text.
+
+  Restart on any call now replays just that call, and leaves the other stories' messages in the chat.
 
 In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
 
@@ -56,6 +64,7 @@ Presenter links:
 - `index.html?app=service` or `index.html?app=bi` opens an app directly.
 - `index.html?ask=How%20is%20my%20aftersales%20performing%3F` opens BI on that answer.
 - `index.html?call=1` opens Service on the simulated call.
+- `index.html?app=service&ro=71512` opens Mrs Shaw's repair order, ready for the one-click parts order.
 
 ### Booking scenarios
 
@@ -81,7 +90,7 @@ Type the registration in the booking form, then click "Next".
 | KY72 BLN | Any job | Nothing due or outstanding |
 | Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
 
-Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It should say "58 of 58 passed".
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It also plays the one-click parts order, from a fresh load and after the Patel story, checks the repair order, parts, return visit and the agent's words, and checks Undo reverses it all. It should say "60 of 60 passed".
 
 ### Questions to try
 
@@ -114,6 +123,8 @@ In Service:
 | `js/call.js` | The simulated call: call events, the agent's tools over the copilot's booking flow, the script and its player. A voice provider adapter would replace the script and emit the same events |
 | `js/call-view.js` | The incoming and outgoing call cards, the call transcript view and the call strip over the planner |
 | `js/swap.js` | Works out whose appointment blocks a preferred time, what would move and which times suit the other customer, and builds the swap as one change |
+| `js/repair-orders.js` | Sample repair orders (job cards) with their lines and recommended work, totals, and approving work as part of one undoable change |
+| `js/repair-order-view.js` | The Repair Order Progress (Detailed) board and the repair order page |
 | `tests/scenarios.html` | Runs the matching, extras and AI agent call scenarios after different demo orders |
 | `js/charts.js` | SVG and HTML charts, with tooltips |
 | `js/copilot.js` | The chat panel, which updates in place so focus and animations carry through |
@@ -125,6 +136,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel, Mrs Hughes, the calls and the Friday bookings that set up the swap are invented as well. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel, Mrs Hughes, Mrs Shaw, the calls, the repair orders and the Friday bookings that set up the swap are invented as well; the Repair Order Progress counts are sample figures. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
 
 Chad made this edit

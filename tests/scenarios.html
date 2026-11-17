@@ -207,6 +207,19 @@ async function run() {
     f.remove();
   }
 
+  for (const [setup, prep] of Object.entries(PARTS_SETUPS)) {
+    const f = await freshApp();
+    const w = f.contentWindow;
+    let res;
+    try { await prep(w); res = await checkApproval(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+    total++; if (res.ok) pass++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${setup}</td><td>One-click parts order</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
+    tr.lastChild.textContent = res.got || '';
+    rows.appendChild(tr);
+    f.remove();
+  }
+
   const sum = document.getElementById('sum');
   sum.textContent = `${pass} of ${total} passed`;
   sum.className = pass === total ? 'pass' : 'fail';
@@ -274,6 +287,48 @@ async function checkCall(w, setup) {
   const ok = inboundOk && clean && patel.from[1] === 8 && mrsH.from[0] === alt.date && mrsH.from[1] === alt.from
     && said(o).includes(`at ${hhmm(alt.from)}`) && w.Parts.state().partHolds.length > 0 && swaps[0].state === 'done';
   return { ok, got: `${got} Swap: Mr Patel → ${hhmm(patel.from[1])}, Mrs Hughes → ${alt.date} ${hhmm(mrsH.from[1])}, ${clean ? 'no clashes' : 'CLASH'}` };
+}
+
+/* ---------- the one-click parts order (Mrs Shaw) ---------- */
+
+const PARTS_SETUPS = {
+  'Fresh load': async () => {},
+  // The stories must work in the same session, in either order.
+  'After the Patel call and swap': async (w) => {
+    await w.Call.start({ speed: 25 });
+    const s = w.Copilot.swaps()[0];
+    if (s) await w.Copilot.approveSwap(s.id, { speed: 25 });
+  },
+};
+
+/** Plays Mrs Shaw's approval call fast, checks everything landed and matches what was said, then undoes it. */
+async function checkApproval(w) {
+  const RO = w.RepairOrders;
+  const before = RO.totals(RO.get(71512)).total;
+  const sum = await w.Call.startApproval(71512, { speed: 25 });
+  const s = w.Call.state();
+  const ctx = s.ctx;
+  const slot = ctx.slot;
+  if (!sum || !ctx.applied) return { ok: false, got: `Not applied. ${s.entries.map((e) => e.text || e.note).slice(-3).join(' | ')}` };
+  const ro = RO.get(71512);
+  const added = RO.totals(ro).total - before;
+  const said = s.entries.filter((e) => e.kind === 'line' && e.speaker === 'agent').map((e) => e.text).join(' ');
+  const hhmm = (h) => w.Optimiser.rules.hhmm(h).replace(/^0/, '');
+  const orders = w.Parts.state().orders.filter((o) => /XC40/.test(o.part));
+  const arrives = orders.map((o) => o.arrives).sort().pop();
+  const snap = w.Workshop.snapshot();
+  const card = snap.cards.find((c) => c.id === 'r71512');
+  const clean = w.Optimiser.rules.validate(snap, { changes: [{ kind: 'appointment', id: 'r71512' }] }).every((x) => x.pass);
+  const brakesTechs = w.Matching.stats('Brakes').map((x) => x.tech);
+  const ok = ro.findings[0].status === 'approved' && ro.lines.some((l) => l.isNew && l.kind === 'requirement')
+    && Math.abs(added - ctx.price) < 1 && orders.length === 2 && orders.every((o) => o.kind === 'order')
+    && card && card.from[0] > arrives && clean && brakesTechs.includes(card.res)
+    && said.includes(`£${ctx.price}`) && said.includes(`at ${hhmm(slot.from)}`) && said.includes(slot.tech.split(' ')[0]);
+  w.Copilot.undoPlan();
+  const after = RO.get(71512);
+  const undone = after.findings[0].status === 'recommended' && Math.abs(RO.totals(after).total - before) < 0.01
+    && !w.Workshop.snapshot().cards.some((c) => c.id === 'r71512') && !w.Parts.state().orders.some((o) => /XC40/.test(o.part));
+  return { ok: ok && undone, got: `£${ctx.price} added (${added.toFixed(2)}), parts arrive ${arrives}, return ${card.from[0]} ${hhmm(card.from[1])} with ${card.res}, ${clean ? 'no clashes' : 'CLASH'}, undo ${undone ? 'reverses it all' : 'FAILED'}` };
 }
 
 // Inside the hidden frame, loading the scripts above is all this page does.

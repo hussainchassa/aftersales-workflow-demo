@@ -67,6 +67,8 @@ window.Workshop = (function () {
     { bay: 'Ramp 6', res: 'Hugin Technician', from: ['2026-11-06', 8], to: ['2026-11-06', 10.5], l1: 'YD70 HHA - Kia - Sportage', l2: 'Ms R Doyle - Load Hours: 2.50', hrs: 2.5, tags: [] },
     { bay: 'Ramp 7', res: 'Megan Livermore', from: ['2026-11-06', 8], to: ['2026-11-06', 10.5], l1: 'NX68 BEW - Nissan - Qashqai', l2: 'Mr T Hale - Load Hours: 2.50', hrs: 2.5, tags: [] },
     { bay: 'Ramp 5', res: 'Megan Megan Tech', from: ['2026-11-06', 8], to: ['2026-11-06', 10], l1: 'LB21 OPC - Mazda - CX-5', l2: 'Mrs J Ward - Load Hours: 2.00', hrs: 2, tags: [] },
+    // Not in the screenshot. Mrs Shaw's car, in today: its technician found her front brakes worn.
+    { bay: 'Ramp 3', res: 'Ana Ceban', from: ['2026-11-04', 8], to: ['2026-11-04', 11], l1: 'FD70 KLR - Volvo - XC40', l2: 'Minor service - Mrs K Shaw - Load Hours: 3.00', hrs: 3, tags: ['arrived'], customer: 'Mrs K Shaw', title: 'Mrs Shaw', phone: '07700 900789', job: 'Minor service', ro: 71512 },
   ];
 
   const j = (date, l1, l2, hrs, tags) => ({ date, l1, l2, hrs, tags: tags || [] });
@@ -405,13 +407,20 @@ window.Workshop = (function () {
 
   function clearPreview() { state.preview = null; }
 
+  // Parts and repair orders are saved with the diary, so one undo reverses a booking with its parts and repair order lines.
+  const sideState = () => ({ parts: window.Parts ? window.Parts.snapshot() : null, ros: window.RepairOrders ? window.RepairOrders.snapshot() : null });
+  function restoreSide(s) {
+    if (s.parts && window.Parts) window.Parts.restore(s.parts);
+    if (s.ros && window.RepairOrders) window.RepairOrders.restore(s.ros);
+  }
+
   function apply(plan) {
-    // Parts are saved with the diary, so one undo reverses a booking and its parts together.
-    history.push(Object.assign(clone({ cards: live.cards, jobs: live.jobs, holds: live.holds }), { parts: window.Parts ? window.Parts.snapshot() : null }));
+    history.push(Object.assign(clone({ cards: live.cards, jobs: live.jobs, holds: live.holds }), sideState()));
     live.cards.forEach((c) => { delete c.ai; });
     state.reveal = true;
     applyChanges(live, plan.changes, 'ai');
     if (plan.partChanges && window.Parts) window.Parts.apply(plan.partChanges);
+    if (plan.roChanges && window.RepairOrders) window.RepairOrders.apply(plan.roChanges);
     state.preview = null;
     state.view = plan.changes.every((c) => c.kind === 'hold' || c.kind === 'bay') ? 'bay' : 'tech';
   }
@@ -420,7 +429,7 @@ window.Workshop = (function () {
     const prior = history.pop();
     if (!prior) return false;
     live.cards = prior.cards; live.jobs = prior.jobs; live.holds = prior.holds;
-    if (prior.parts && window.Parts) window.Parts.restore(prior.parts);
+    restoreSide(prior);
     state.preview = null;
     return true;
   }
@@ -435,7 +444,7 @@ window.Workshop = (function () {
 
   /** Everything a demo restart needs to put back: the diary, its undo history and the parts. */
   function saveState() {
-    return clone({ cards: live.cards, jobs: live.jobs, holds: live.holds, history, parts: window.Parts ? window.Parts.snapshot() : null });
+    return clone(Object.assign({ cards: live.cards, jobs: live.jobs, holds: live.holds, history }, sideState()));
   }
 
   function restoreState(s) {
@@ -443,7 +452,7 @@ window.Workshop = (function () {
     live.cards = copy.cards; live.jobs = copy.jobs; live.holds = copy.holds;
     history.length = 0;
     copy.history.forEach((h) => history.push(h));
-    if (copy.parts && window.Parts) window.Parts.restore(copy.parts);
+    restoreSide(copy);
     state.preview = null;
   }
 

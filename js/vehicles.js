@@ -76,6 +76,13 @@ window.Vehicles = (function () {
       done: Object.fromEntries(['brake-fluid', 'cabin-filter', 'air-filter', 'oil-service', 'coolant'].map((k) => [k, ['2026-09-01', 24000]])),
       flags: [],
     },
+    // Mrs Shaw's car, in today for a minor service; the one-click parts order story.
+    'FD70 KLR': {
+      make: 'Volvo', model: 'XC40 B4', registered: '2020-09-01', mpy: 9000,
+      visits: [['2025-11-02', 36500]],
+      done: Object.fromEntries(['brake-fluid', 'cabin-filter', 'air-filter', 'oil-service', 'coolant'].map((k) => [k, ['2025-11-02', 36500]])),
+      flags: [],
+    },
   };
 
   // The other cars already in the planner, with plain made-up histories.
@@ -139,6 +146,7 @@ window.Vehicles = (function () {
   const CUSTOMERS = [
     { name: 'Mr R Patel', title: 'Mr Patel', phone: '07700 900123', reg: 'SC20 UYT' },
     { name: 'Mrs P Hughes', title: 'Mrs Hughes', phone: '07700 900456', reg: 'GY21 NBF' },
+    { name: 'Mrs K Shaw', title: 'Mrs Shaw', phone: '07700 900789', reg: 'FD70 KLR' },
   ];
 
   /** The customer and their car for a caller's number, or null. */

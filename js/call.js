@@ -115,7 +115,43 @@ window.Call = (function () {
       ctx.swapped = await C().applySwap(ctx.swap, choice);
       return ctx.swapped;
     },
+    /* The one-click parts order (Mrs Shaw). */
+    async check_parts(ctx) {
+      const today = snap().today;
+      const far = AS.toIso(AS.toN(today) + 10);
+      ctx.sources = ctx.finding.parts.map(([p, qty]) => Object.assign({ part: p, qty }, window.Parts.availability(p, qty, far, today)));
+      ctx.arrives = ctx.sources.map((x) => x.arrives || x.earliest).sort().pop();
+      ctx.allShelf = ctx.sources.every((x) => x.source === 'shelf');
+      return ctx.sources;
+    },
+    /** Matching, for the day the customer asked for, after the parts can be in. */
+    async find_return_slot(ctx) {
+      const r = window.Matching.suggest({ type: ctx.finding.type, date: ctx.returnDate, window: 'morning', customer: ctx.ro.customer }, snap());
+      ctx.slot = r && r.main;
+      return ctx.slot;
+    },
+    /** On her yes: the work onto the repair order, the parts ordered and the return visit booked, as one change. */
+    async apply_approval(ctx) {
+      const s = ctx.slot;
+      const ro = ctx.ro;
+      const f = ctx.finding;
+      const today = snap().today;
+      ctx.partChanges = window.Parts.plan(f.parts.map(([part, qty]) => ({ part, qty })), s.date, today, `r${ro.id}`);
+      if (!ctx.partChanges) return false;
+      const plan = {
+        changes: [{ kind: 'appointment', id: `r${ro.id}`, res: s.tech, bay: s.bay, from: [s.date, s.from], to: [s.date, s.to], hrs: s.to - s.from, l1: `${ro.reg} - ${ro.vehicle}`, l2: `${f.title} (recommended work) - ${ro.customer}` }],
+        partChanges: ctx.partChanges,
+        roChanges: [{ kind: 'approve', roId: ro.id, findingId: f.id, by: ro.customer, booking: { date: s.date, from: s.from, tech: s.tech }, arrives: ctx.arrives }],
+      };
+      ctx.applied = await C().applyApproval(plan, ro, f, s);
+      return ctx.applied;
+    },
     async notify_customer(ctx) {
+      if (ctx.kind === 'approval') {
+        ctx.notice = `Hi ${(window.Vehicles.lookupCaller(ctx.ro.phone) || {}).title || ctx.ro.customer}, you're booked in ${dayOf(ctx.slot.date)} at ${spokenTime(ctx.slot.from)} for your front brakes. Your car is still ready today as planned.`;
+        C().notifyCustomer(ctx.ro.customer, ctx.notice);
+        return ctx.notice;
+      }
       const s = ctx.swap;
       ctx.notice = `Good news, ${s.callerTitle}: we've moved you to ${dayOf(s.moved.from[0]).replace(/^on /, '')} at ${spokenTime(s.moved.from[1])}, with the same work and parts. See you then.`;
       C().notifyCustomer(s.callerName, ctx.notice);
@@ -146,6 +182,13 @@ window.Call = (function () {
 
   const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
   const hoursWords = (h) => (h % 1 ? `${Math.floor(h)} and a half hours` : `${h} hours`);
+  /** 2.25 → "2 and a quarter hours", to the nearest quarter. */
+  function quarterHours(h) {
+    const q = Math.round(h * 4) / 4;
+    const whole = Math.floor(q);
+    const frac = { 0.25: ' and a quarter', 0.5: ' and a half', 0.75: ' and three quarters' }[q - whole] || '';
+    return `${whole}${frac} hour${whole === 1 && !frac ? '' : 's'}`;
+  }
 
   function offerLine(ctx) {
     const items = ctx.offer;
@@ -230,6 +273,33 @@ window.Call = (function () {
     ];
   }
 
+  /** The one-click parts order: asking for approval of recommended work. Only the "yes" path exists. */
+  function approvalScript(ro, f) {
+    const car = window.Vehicles.lookup(ro.reg);
+    const carName = car ? `${car.make} ${car.model.split(' ')[0]}` : 'car';
+    const title = (window.Vehicles.lookupCaller(ro.phone) || {}).title || ro.customer;
+    // She'd rather bring it back on Monday; the parts only need to be in by the working day before.
+    let mon = AS.toN(snap().today) + 1;
+    while (AS.dateOf(mon).getUTCDay() !== 1) mon++;
+    S.ctx.returnDate = AS.toIso(mon);
+    const weekday = (iso) => AS.dateOf(AS.toN(iso)).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+    return [
+      { say: 'agent', text: `Hello, is that ${title}? I'm the AI assistant from the service team, calling about your ${carName}, which is in with us today.` },
+      { say: 'customer', text: 'Yes, speaking. Is everything OK?' },
+      { tool: 'check_parts', working: 'Checking the parts for the brakes', note: (ctx) => `Agent checked the parts: ${ctx.sources.map((x) => window.Parts.name(x.part).replace(/^./, (c) => c.toLowerCase())).join(' and ')} · ${ctx.allShelf ? 'on the shelf' : `none in stock, supplier delivers ${weekday(ctx.arrives)}`}` },
+      { say: 'agent', text: (ctx) => `The service is going fine. While it was up on the ramp, ${first(f.by)} found your front brake pads and discs are worn down to 2 millimetres, so they need replacing soon. It comes to ${gbp(ctx.price)} including VAT. ${ctx.allShelf ? 'We have the parts here.' : `We don't have those parts for your car in stock, so the supplier would deliver them on ${weekday(ctx.arrives)}, which means we can't do it today.`} Would you like us to go ahead, and could you bring the car back for it?` },
+      { say: 'customer', text: "Oh, right. Yes, go ahead. I can't leave the car though. Could I bring it back on Monday morning?" },
+      { tool: 'find_return_slot', args: () => null, working: 'Finding a time on Monday morning', note: (ctx) => (ctx.slot ? `Agent found ${ctx.slot.tech} · ${window.Matching.dayShort(ctx.slot.date)} ${R().hhmm(ctx.slot.from)}` : 'Nobody free on Monday morning') },
+      { say: 'agent', text: (ctx) => (ctx.slot ? `Monday morning's fine. I can book you in at ${spokenTime(ctx.slot.from)} with ${first(ctx.slot.tech)}. It takes about ${quarterHours(ctx.slot.to - ctx.slot.from)}, so it should be ready by around ${spokenTime(ctx.slot.to)}. I'll order the parts now so they're here in time. Shall I book that?` : "I'm sorry, Monday morning is full. I'll ask the service team to call you with another time.") },
+      { say: 'customer', text: 'Yes please.' },
+      { tool: 'apply_approval', when: (ctx) => !!ctx.slot, working: 'Adding the work, ordering the parts and booking Monday', note: (ctx) => (ctx.applied ? `Agent added the brakes to repair order ${ro.id} as approved work, ordered the parts and booked ${window.Matching.dayShort(ctx.slot.date)} ${R().hhmm(ctx.slot.from)} with ${ctx.slot.tech}` : "Agent couldn't complete the order, so nothing changed") },
+      { say: 'agent', text: (ctx) => (ctx.applied ? `All done. Your car will be ready today as planned, and we'll see you on Monday at ${spokenTime(ctx.slot.from)}. I'll send you a text to confirm.` : "I'm sorry, something's changed in the diary, so I haven't booked it. The service team will call you back.") },
+      { say: 'customer', text: 'Great, thank you. Bye.' },
+      { say: 'agent', text: `Thanks, ${title}. Goodbye.` },
+      { tool: 'notify_customer', when: (ctx) => !!ctx.applied, working: 'Sending a confirmation text', note: () => `Agent texted ${ro.customer} the Monday booking` },
+    ];
+  }
+
   /* ---------- the player ---------- */
 
   async function playLine(step, run) {
@@ -262,6 +332,15 @@ window.Call = (function () {
   function summary() {
     const ctx = S.ctx;
     const lines = [`Call length ${clock(elapsed())}, handled by the AI agent`];
+    if (ctx.kind === 'approval') {
+      const sl = ctx.slot;
+      if (ctx.applied) {
+        lines.push(`${ctx.finding.title} approved: ${gbp(ctx.price)} inc VAT, added to repair order ${ctx.ro.id}`);
+        (ctx.partChanges || []).forEach((c) => lines.push(window.Parts.describe(c)));
+        lines.push(`Return visit ${window.Matching.dayShort(sl.date)} ${R().hhmm(sl.from)} with ${sl.tech}, ${sl.bay}`);
+      }
+      return { title: ctx.applied ? `${S.caller.title} approved the brakes. Return visit ${dayOf(sl.date)} at ${R().hhmm(sl.from)}.` : 'Nothing was changed.', lines };
+    }
     if (S.direction === 'outbound') {
       const s = ctx.swap;
       const a = s.alternatives[ctx.choice || 0];
@@ -305,16 +384,18 @@ window.Call = (function () {
     return sum;
   }
 
-  /** After an advisor approves a swap request: the agent phones the customer in the way. */
-  async function startOutbound(swap, opts) {
-    if (S.status === 'ringing' || S.status === 'live') return null;
-    const run = ++S.run;
-    if (opts && opts.speed) S.speed = opts.speed;
-    S.ctx = { swap };
-    const b = swap.blocker;
-    const caller = Object.assign(window.Vehicles.lookupCaller(b.phone) || {}, { name: b.customer, title: b.title, phone: b.phone });
+  /**
+   * Each call is a "story" Restart can replay: the diary, parts and repair orders as they
+   * were when it began, where its copilot messages start, and how to play it again.
+   */
+  function beginStory(replay) {
+    S.story = { snapshot: window.Workshop.saveState(), mark: C().messageCount(), replay };
+  }
+
+  /** Runs a call, turning a crash into an ended call and a restart into a quiet stop. */
+  async function guarded(fn) {
     try {
-      return await play(run, caller, 'outbound', () => outboundScript(swap));
+      return await fn();
     } catch (err) {
       if (err === CANCEL) return null;
       console.error(err);
@@ -326,28 +407,51 @@ window.Call = (function () {
     }
   }
 
+  /** After an advisor approves a swap request: the agent phones the customer in the way. */
+  async function startOutbound(swap, opts) {
+    if (S.status === 'ringing' || S.status === 'live') return null;
+    const run = ++S.run;
+    if (opts && opts.speed) S.speed = opts.speed;
+    beginStory((o) => startOutbound(swap, o));
+    S.ctx = { kind: 'swap', swap };
+    const b = swap.blocker;
+    const caller = Object.assign(window.Vehicles.lookupCaller(b.phone) || {}, { name: b.customer, title: b.title, phone: b.phone });
+    return guarded(async () => {
+      const sum = await play(run, caller, 'outbound', () => outboundScript(swap));
+      C().swapFinished(swap, !!S.ctx.swapped);
+      return sum;
+    });
+  }
+
+  /** The one-click parts order: the agent phones the customer for approval of recommended work. */
+  async function startApproval(roId, opts) {
+    if (S.status === 'ringing' || S.status === 'live') return null;
+    const ro = window.RepairOrders.get(roId);
+    const finding = ro && ro.findings.find((f) => f.status === 'recommended');
+    if (!finding) return null;
+    const run = ++S.run;
+    if (opts && opts.speed) S.speed = opts.speed;
+    beginStory((o) => startApproval(roId, o));
+    S.ctx = { kind: 'approval', ro, finding, price: window.RepairOrders.findingPrice(finding) };
+    const known = window.Vehicles.lookupCaller(ro.phone) || {};
+    const caller = Object.assign(known, { name: ro.customer, title: known.title || ro.customer, phone: ro.phone });
+    return guarded(() => play(run, caller, 'outbound', () => approvalScript(ro, finding)));
+  }
+
   /** Starts the simulated call. Resolves when it ends, or when it's restarted. */
   async function start(opts) {
     if (S.status === 'ringing' || S.status === 'live') return null;
     const run = ++S.run;
     S.speed = (opts && opts.speed) || 1;
-    S.snapshot = window.Workshop.saveState();
+    beginStory((o) => start(o));
     const caller = window.Vehicles.lookupCaller(CALLER);
-    S.ctx = { chosen: [], offer: [] };
-    try {
+    S.ctx = { kind: 'inbound', chosen: [], offer: [] };
+    return guarded(async () => {
       const sum = await play(run, caller, 'inbound', () => script(caller));
       // The caller's first choice goes to an advisor; nobody is contacted until they approve.
       if (S.ctx.swap) C().swapRequest(Object.assign(S.ctx.swap, { callerName: caller.name, callerTitle: caller.title }));
       return sum;
-    } catch (err) {
-      if (err === CANCEL) return null;
-      console.error(err);
-      S.status = 'ended';
-      S.endedAt = now();
-      C().agentEnd('The call stopped because something went wrong.');
-      emit('ended', { title: 'The call stopped', lines: [] });
-      return null;
-    }
+    });
   }
 
   function togglePause() {
@@ -356,22 +460,26 @@ window.Call = (function () {
     emit('paused', S.paused);
   }
 
-  /** Puts the diary and parts back as they were when the phone rang, then plays the call again. */
+  /**
+   * Replays the call on screen: puts the diary, parts and repair orders back as they were
+   * when it began, removes only this call's copilot messages, and plays it again.
+   */
   async function restart() {
-    if (!S.snapshot) return start();
+    if (!S.story) return start();
+    const story = S.story;
     S.run++;
     S.paused = false;
     for (let i = 0; i < 100 && C().busy(); i++) await new Promise((r) => setTimeout(r, 50));
-    window.Workshop.restoreState(S.snapshot);
-    C().resetForCall();
+    window.Workshop.restoreState(story.snapshot);
+    C().truncate(story.mark);
     S.status = 'idle';
     emit('reset');
     window.App.showPlanner();
-    return start({ speed: S.speed });
+    return story.replay({ speed: S.speed });
   }
 
   return {
-    on, emit, start, startOutbound, restart, togglePause, elapsed, clock,
+    on, emit, start, startOutbound, startApproval, restart, togglePause, elapsed, clock,
     state: () => S, live: () => S.status === 'ringing' || S.status === 'live',
   };
 })();

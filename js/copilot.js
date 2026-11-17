@@ -323,7 +323,7 @@ window.Copilot = (function () {
   function contextLabel() {
     const view = window.App.view();
     if (S.mode === 'bi') return view === 'dashboard' ? 'Report' : 'BI';
-    return { plan: 'Improvement plan', call: 'Live call' }[view] || 'Technician planner';
+    return { plan: 'Improvement plan', call: 'Live call', ro: 'Repair order', 'ro-progress': 'Repair Order Progress' }[view] || 'Technician planner';
   }
 
   function fitComposer(q) {
@@ -1033,11 +1033,32 @@ window.Copilot = (function () {
     m.state = 'calling';
     window.Workshop.clearPreview();
     paint();
-    const sum = await window.Call.startOutbound(m.swap, opts);
-    const ctx = window.Call.state().ctx;
-    m.state = ctx && ctx.swapped ? 'done' : 'failed';
+    return window.Call.startOutbound(m.swap, opts);
+  }
+
+  /** The outbound call reports back when it ends; a restarted call reports when its replay ends. */
+  function swapFinished(swap, done) {
+    const m = S.messages.find((x) => x.kind === 'swap' && x.swap === swap);
+    if (!m) return;
+    m.state = done ? 'done' : 'failed';
     paint();
-    return sum;
+  }
+
+  /** The one-click parts order, after the customer's yes: repair order lines, parts and the return visit as one change. */
+  async function applyApproval(plan, ro, f, slot) {
+    const [appt] = plan.changes;
+    const when = `${shortDay(slot.date)} ${hhmm(slot.from)}`;
+    S.plan = Object.assign(plan, {
+      byAgent: S.agent ? S.agent.name : null,
+      items: [
+        { on: true, changes: plan.roChanges, doing: `Adding the brakes to repair order ${ro.id}`, logText: `${f.title} added to repair order ${ro.id} as approved work` },
+        ...plan.partChanges.map((c) => ({ on: true, changes: [c], doing: window.Parts.describe(c).replace(/^(\w+)/, (w) => ({ Hold: 'Holding', Request: 'Requesting', Order: 'Ordering' }[w] || w)), logText: window.Parts.describe(c) })),
+        { on: true, changes: [appt], doing: `Booking the return visit with ${slot.tech.split(/\s+/)[0]}`, logText: `${ro.reg} booked with ${slot.tech}, ${when}, ${slot.bay}` },
+      ],
+      doneText: 'The return visit is highlighted on the planner, and the work is on the repair order.',
+    });
+    await applyPlan();
+    return true;
   }
 
   /** Applies both moves as one change with one undo, after the customer said yes on the call. */
@@ -1066,9 +1087,12 @@ window.Copilot = (function () {
   }
 
   /** Clears the conversation for a restarted call, without changing the main area. */
-  function resetForCall() {
+  function resetForCall() { truncate(0); }
+
+  /** Removes messages added since `count`, e.g. one call's, leaving earlier conversation alone. */
+  function truncate(count) {
     window.Workshop.clearPreview();
-    S.messages = [];
+    S.messages = S.messages.slice(0, count);
     S.plan = null;
     S.agent = null;
     S.busy = false;
@@ -1117,5 +1141,6 @@ window.Copilot = (function () {
 
   return { setMode, mode: () => S.mode, send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
     agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy,
-    swapRequest, previewSwap, declineSwap, approveSwap, applySwap, notifyCustomer, swaps: () => S.messages.filter((m) => m.kind === 'swap') };
+    swapRequest, previewSwap, declineSwap, approveSwap, applySwap, notifyCustomer, swaps: () => S.messages.filter((m) => m.kind === 'swap'),
+    swapFinished, applyApproval, truncate, messageCount: () => S.messages.length };
 })();

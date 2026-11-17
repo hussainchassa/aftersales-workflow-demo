@@ -29,6 +29,9 @@ window.Parts = (function () {
     'FILTER-AIR': ['Air filter', 30, 1],
     'OIL-5L': ['Engine oil, 5 litres', 38, 1],
     'FILTER-OIL': ['Oil filter', 14, 1],
+    // For Mrs Shaw's XC40: no branch has them, so they're always ordered. One day from the supplier.
+    'PAD-F-XC40': ['Front brake pads (XC40)', 74, 1],
+    'DISC-F-XC40': ['Front brake discs, pair (XC40)', 158, 1],
   };
 
   // Stock on the shelf, by branch. Shaped for the demo scenarios: the battery is only
