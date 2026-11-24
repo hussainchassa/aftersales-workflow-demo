@@ -246,3 +246,8 @@
 .acq-t td.n { padding-left: 8px; text-align: right; white-space: nowrap; }
 .acq-t td.neg { color: var(--amber); }
 .acq-t .tot td { font-weight: 700; border-top: 1px solid var(--line); border-bottom: 0; }
+.acq-offer > span { max-width: 55%; }
+.acq-tog { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand); background: none; border: 0; cursor: pointer; }
+.acq-tog:hover { text-decoration: underline; }
+.acq-tog[aria-expanded="true"] svg { transform: rotate(180deg); }
+.acq-more { display: flex; flex-direction: column; gap: 8px; }

@@ -1058,15 +1058,29 @@ window.Copilot = (function () {
     if (m.state === 'dismissed' || m.state === 'withdrawn') {
       return `<div class="ccard acq off">${head}<div class="sm">${esc(r.reg)}: ${m.state === 'dismissed' ? 'Dismissed. Nothing was sent.' : "The booking was undone, so this isn't needed."}</div></div>`;
     }
+    // The decision first: which car, what to offer, and why in one line. The working sits under View details.
     const rows = r.lines.map((l) => `<tr><td>${esc(l.label)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</td><td class="n ${l.amount < 0 ? 'neg' : ''}">${l.amount < 0 ? '−' : ''}${gbp0(Math.abs(l.amount))}</td></tr>`).join('');
+    const year = r.registered.slice(0, 4);
+    const why = `High need: none in stock, ${r.need.waiting} ${r.need.waiting === 1 ? 'buyer' : 'buyers'} waiting.`;
+    const details = m.open ? `<div class="acq-more">
+        <ul class="acq-why">${r.reasons.map((x) => `<li><b>${esc(x.head)}</b> ${esc(x.text)}</li>`).join('')}</ul>
+        <table class="acq-t">${rows}<tr class="tot"><td>Suggested offer (rounded)</td><td class="n">${gbp0(r.offer)}</td></tr></table>
+        <div class="sm">Range ${range}, ${gbp0(r.aboveTrade)} above trade value.</div></div>` : '';
     return `<div class="ccard acq">${head}
-      <div class="c-result">The used car team would want this car</div>
-      <div class="acq-car"><div><b>${esc(r.title)}</b>${esc(r.reg)} · ${esc(AS.dateOf(AS.toN(r.registered)).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }))} · about ${r.miles.toLocaleString('en-GB')} miles</div><div><b>${esc(m.customer)}</b>in ${esc(when)}</div></div>
-      <ul class="acq-why">${r.reasons.map((x) => `<li><b>${esc(x.head)}</b> ${esc(x.text)}</li>`).join('')}</ul>
-      <div class="acq-offer"><div><span class="xs muted">Suggested offer</span><b>${gbp0(r.offer)}</b></div><span>Range ${range}<br>${gbp0(r.aboveTrade)} above trade value</span></div>
-      <table class="acq-t">${rows}<tr class="tot"><td>Suggested offer (rounded)</td><td class="n">${gbp0(r.offer)}</td></tr></table>
+      <div class="c-result">${esc(year)} ${esc(r.name)} worth buying</div>
+      <div class="sm">${esc(r.reg)} · ${esc(m.customer)}, in ${esc(when)}</div>
+      <div class="acq-offer"><div><span class="xs muted">Suggested offer</span><b>${gbp0(r.offer)}</b></div><span>${esc(why)}</span></div>
+      <button class="acq-tog" data-a="acq-details" data-m="${m.id}" aria-expanded="${!!m.open}"><span>${m.open ? 'Hide details' : 'View details'}</span>${ic('down', 'sm')}</button>
+      ${details}
       <div class="c-acts"><button class="btn s p" data-a="acq-refer" data-m="${m.id}">Refer to used car team</button><button class="btn s" data-a="acq-dismiss" data-m="${m.id}">Dismiss</button></div>
-      <div class="safe">${ic('lock', 'sm')}Nothing is said to ${esc(m.customer)}. The used car manager sets the final price, subject to inspection.</div></div>`;
+      <div class="safe">${ic('lock', 'sm')}Nothing is said to ${esc(m.customer)}. Final price set by the used car manager.</div></div>`;
+  }
+
+  function toggleAcquisition(id) {
+    const m = findMsg('acquisition', id);
+    if (!m) return;
+    m.open = !m.open;
+    paint();
   }
 
   /** Recommended work waiting on the customer, each with a way into its repair order's Recommended Work tab. */
@@ -1257,5 +1271,5 @@ window.Copilot = (function () {
     agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy,
     swapRequest, previewSwap, declineSwap, approveSwap, applySwap, notifyCustomer, swaps: () => S.messages.filter((m) => m.kind === 'swap'),
     swapFinished, applyApproval, truncate, messageCount: () => S.messages.length,
-    referAcquisition, dismissAcquisition, acquisitions: () => S.messages.filter((m) => m.kind === 'acquisition') };
+    referAcquisition, dismissAcquisition, toggleAcquisition, acquisitions: () => S.messages.filter((m) => m.kind === 'acquisition') };
 })();

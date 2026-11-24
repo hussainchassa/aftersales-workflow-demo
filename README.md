@@ -63,7 +63,7 @@ A question for the other app gets a short reply saying where to ask it.
   Restart on any call now replays just that call, and leaves the other stories' messages in the chat.
 - **Service line acquisition:** service customers' cars are a good source of used stock. When an advisor books a service, the agent checks the car against what the used car team needs. If it's wanted, it flags it to the advisor with a suggested offer. Nothing is said to the customer.
   1. In AI Assistance, click **Book an appointment**. Enter Mr D Okafor, registration **KS22 VRT** (a 2022 Kia Sportage hybrid), and **Major service** on Friday. Click **Next**, leave the front pads and wipers ticked, then **Find a technician** and **Book**.
-  2. An **Acquisition opportunity** card appears under the booking. It explains why the car is wanted: high need (none in stock, sells fast, buyers waiting), good condition, and average mileage. It suggests an offer (£21,100, range £20,450–£21,600, £1,300 above trade value), with the breakdown:
+  2. An **Acquisition opportunity** card appears under the booking. It's kept short: the car, a suggested offer of £21,100, and one line on why ("High need: none in stock, 3 buyers waiting"). **View details** opens the full reasons (high need, good condition, average mileage), the range (£20,450–£21,600, £1,300 above trade value) and the breakdown:
      - the retail price
      - cosmetic reconditioning (a kerbed alloy and a bumper scuff)
      - mechanical reconditioning (nothing, because the pads and wipers are being fixed on this visit)

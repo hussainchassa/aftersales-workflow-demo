@@ -319,6 +319,7 @@ window.App = (function () {
     'ro-approve': (el) => window.Call.startApproval(el.dataset.v),
     'acq-refer': (el) => window.Copilot.referAcquisition(el.dataset.m),
     'acq-dismiss': (el) => window.Copilot.dismissAcquisition(el.dataset.m),
+    'acq-details': (el) => window.Copilot.toggleAcquisition(el.dataset.m),
     'swap-approve': (el) => window.Copilot.approveSwap(el.dataset.m),
     'swap-preview': (el) => window.Copilot.previewSwap(el.dataset.m),
     'swap-decline': (el) => window.Copilot.declineSwap(el.dataset.m),

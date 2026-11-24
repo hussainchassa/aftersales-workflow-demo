@@ -131,7 +131,7 @@ window.Acquisition = (function () {
     ].filter(Boolean);
 
     return {
-      reg: car.reg, title: `${car.make} ${car.model}`, registered: car.registered, miles, need: n,
+      reg: car.reg, title: `${car.make} ${car.model}`, name: key, registered: car.registered, miles, need: n,
       reasons, lines, retail, trade: guide.trade, offer, low, high, aboveTrade: offer - guide.trade,
       cosmetic, mechanical, fixedNow,
     };
