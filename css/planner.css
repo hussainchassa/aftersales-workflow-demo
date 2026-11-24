@@ -81,3 +81,4 @@
 @keyframes pl-pop { from { opacity: 0; transform: scale(.96); } }
 .pl-card.moving { z-index: 4; border: 1.5px dashed var(--amber); border-bottom: 4px solid var(--amber); background: repeating-linear-gradient(135deg, #fff8e8 0 6px, #fff 6px 12px); opacity: 1; }
 .pl-moving { display: inline-block; margin-right: 3px; padding: 0 4px; font-size: 10px; line-height: 13px; color: #fff; background: var(--amber); border-radius: 3px; }
+.pl-offer { display: inline-block; margin-right: 3px; padding: 0 4px; font-size: 10px; line-height: 13px; color: #fff; background: var(--brand); border-radius: 3px; }

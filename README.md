@@ -61,6 +61,19 @@ A question for the other app gets a short reply saying where to ask it.
   Undo puts the item back in Awaiting Approval, still priced. Restart on the call goes back to Awaiting Parts.
 
   Restart on any call now replays just that call, and leaves the other stories' messages in the chat.
+- **Service line acquisition:** service customers' cars are a good source of used stock. When an advisor books a service, the agent checks the car against what the used car team needs. If it's wanted, it flags it to the advisor with a suggested offer. Nothing is said to the customer.
+  1. In AI Assistance, click **Book an appointment**. Enter Mr D Okafor, registration **KS22 VRT** (a 2022 Kia Sportage hybrid), and **Major service** on Friday. Click **Next**, leave the front pads and wipers ticked, then **Find a technician** and **Book**.
+  2. An **Acquisition opportunity** card appears under the booking. It explains why the car is wanted: high need (none in stock, sells fast, buyers waiting), good condition, and average mileage. It suggests an offer (£21,100, range £20,450–£21,600, £1,300 above trade value), with the breakdown:
+     - the retail price
+     - cosmetic reconditioning (a kerbed alloy and a bumper scuff)
+     - mechanical reconditioning (nothing, because the pads and wipers are being fixed on this visit)
+     - standard prep
+     - a 9% margin, thinner than the normal 14% because the car is badly needed
+
+     Untick the pads and wipers before booking, and they're added to reconditioning, so the offer drops to £20,850.
+  3. Click **Refer to used car team**. The card records the referral as yours (Service keeps the credit), and Friday's planner card shows **Offer prepared** for the salesperson. Undo reverses it. **Dismiss** drops the flag.
+
+  The used car manager sets the final price, subject to inspection. Other cars aren't flagged, because the used car team isn't short of them.
 
 In the chat, Enter sends and Shift+Enter starts a new line. Up and down step through earlier questions, and Esc closes the panel. In the booking form, Enter moves to the next step.
 
@@ -94,7 +107,7 @@ Type the registration in the booking form, then click "Next".
 | KY72 BLN | Any job | Nothing due or outstanding |
 | Anything else, e.g. AB12 CDE | Any job | No history, so it goes straight to finding a technician |
 
-Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It also plays the one-click parts order, from a fresh load and after the Patel story, checks the repair order, parts, return visit and the agent's words, and checks Undo reverses it all. Before that, it asks the copilot for unapproved work and checks its button opens the same Recommended Work screen. It should say "62 of 62 passed".
+Open `tests/scenarios.html` to check the matching and extras scenarios still behave after other copilot actions. It also plays the AI agent call at high speed and checks the booking matches what the agent said. It also plays the swap: it approves the request from code, plays Mrs Hughes's call and checks both moves landed without clashes, and checks the agent simply books 8:00 when it is free. It also plays the one-click parts order, from a fresh load and after the Patel story, checks the repair order, parts, return visit and the agent's words, and checks Undo reverses it all. Before that, it asks the copilot for unapproved work and checks its button opens the same Recommended Work screen. It books Mr Okafor's Kia through the booking form with and without the extras, checks the offer, refers it and undoes it, and checks other cars aren't flagged. It should say "64 of 64 passed".
 
 ### Questions to try
 
@@ -125,6 +138,7 @@ In Service:
 | `js/parts.js` | Parts stock by branch, holds, transfers and supplier orders, and whether a part can arrive in time |
 | `js/vehicles.js` | Sample cars with mileage and health-check history, the service schedule, and what each job already covers |
 | `js/upsell.js` | Works out the extras worth offering for a car and appointment day, in the order to raise them |
+| `js/acquisition.js` | Whether the used car team would want a service customer's car, and a suggested offer from its condition and how badly it's needed |
 | `js/call.js` | The simulated call: call events, the agent's tools over the copilot's booking flow, the script and its player. A voice provider adapter would replace the script and emit the same events |
 | `js/call-view.js` | The incoming and outgoing call cards, the call transcript view and the call strip over the planner |
 | `js/swap.js` | Works out whose appointment blocks a preferred time, what would move and which times suit the other customer, and builds the swap as one change |
@@ -141,6 +155,6 @@ Question parsing is rule-based, so unusual phrasing can fall back to a "can't an
 
 The diary only changes when someone approves a plan, and the whole plan can be undone. Changes last until the page is reloaded.
 
-All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel, Mrs Hughes, Mrs Shaw, the calls, the repair orders and the Friday bookings that set up the swap are invented as well; the Repair Order Progress counts are sample figures. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
+All aftersales figures, targets and the technicians at Branches 2 and 3 are invented sample data. So is the technician job history used for matching, and the three Thursday bookings added to the planner for the diagnostics scenario. The cars, service schedule, parts, stock, lead times and prices used for extras are invented too. The schedule is sample guidance, not real manufacturer data. Extras prices include VAT; dashboard figures don't. Mr Patel, Mrs Hughes, Mrs Shaw, the calls, the repair orders and the Friday bookings that set up the swap are invented as well, as are Mr Okafor, his car, the used car team's stock needs and the retail and trade prices; the Repair Order Progress counts are sample figures. Service uses a fixed Branch 1 labour rate (in `js/optimiser.js`), so it never reads BI's figures.
 
 Chad made this edit

@@ -76,6 +76,19 @@ window.Vehicles = (function () {
       done: Object.fromEntries(['brake-fluid', 'cabin-filter', 'air-filter', 'oil-service', 'coolant'].map((k) => [k, ['2026-09-01', 24000]])),
       flags: [],
     },
+    // Mr Okafor's car, booked in for Friday; the service line acquisition story. The used
+    // car team is short of these, and its cosmetic marks are priced when working out an offer.
+    'KS22 VRT': {
+      make: 'Kia', model: 'Sportage 1.6 T-GDi HEV GT-Line', registered: '2022-03-01', mpy: 7500,
+      visits: [['2023-11-03', 12500], ['2024-11-05', 20000], ['2025-11-06', 27500]],
+      done: Object.fromEntries(['brake-fluid', 'cabin-filter', 'air-filter', 'oil-service', 'coolant'].map((k) => [k, ['2025-11-06', 27500]])),
+      flags: [
+        ['2025-11-06', 'front-pads', 'amber', 'Measured 4 mm', true],
+        ['2025-11-06', 'wipers', 'amber', 'Smearing', true],
+      ],
+      // [date, note, repair price]: never offered as extras, only priced into an offer.
+      cosmetic: [['2025-11-06', 'Kerbed alloy, front left', 95], ['2025-11-06', 'Scuff on the rear bumper', 180]],
+    },
     // Mrs Shaw's car, in today for a minor service; the one-click parts order story.
     'FD70 KLR': {
       make: 'Volvo', model: 'XC40 B4', registered: '2020-09-01', mpy: 9000,
@@ -147,6 +160,7 @@ window.Vehicles = (function () {
     { name: 'Mr R Patel', title: 'Mr Patel', phone: '07700 900123', reg: 'SC20 UYT' },
     { name: 'Mrs P Hughes', title: 'Mrs Hughes', phone: '07700 900456', reg: 'GY21 NBF' },
     { name: 'Mrs K Shaw', title: 'Mrs Shaw', phone: '07700 900789', reg: 'FD70 KLR' },
+    { name: 'Mr D Okafor', title: 'Mr Okafor', phone: '07700 900321', reg: 'KS22 VRT' },
   ];
 
   /** The customer and their car for a caller's number, or null. */

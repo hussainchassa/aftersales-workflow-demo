@@ -144,6 +144,7 @@ window.Copilot = (function () {
     }
     if (m.kind === 'swap') return swapHtml(m);
     if (m.kind === 'pending') return pendingHtml(m);
+    if (m.kind === 'acquisition') return acquisitionHtml(m);
     if (m.kind === 'booking-form') return bookingFormHtml(m);
     if (m.kind === 'booking-extras') return extrasHtml(m);
     if (m.kind === 'booking-suggestion') return suggestionHtml(m);
@@ -571,24 +572,42 @@ window.Copilot = (function () {
     window.Workshop.apply(plan);
     S.messages.push({
       role: 'a', kind: 'applied', count: plan.changes.length, detail: plan.doneText, booking: plan.booking, byAgent: plan.byAgent,
-      log: plan.items.filter((i) => i.on && i.changes.length).map((i) => i.logText),
+      log: plan.items.filter((i) => i.on && i.changes.length).map((i) => i.logText), seq: ++undoSeq,
     });
     window.App.showPlanner();
+    if (plan.booking) await checkAcquisition(plan);
     S.busy = wasBusy;
     paint(true);
   }
 
+  // Every change to the diary gets the next number, so undo always reverses the latest,
+  // whether that's a booking, a plan or an acquisition referral.
+  let undoSeq = 0;
+  const undoable = () => S.messages
+    .filter((x) => (x.kind === 'applied' && !x.undone) || (x.kind === 'acquisition' && x.state === 'referred'))
+    .sort((a, b) => b.seq - a.seq)[0];
+
   function undoPlan() {
+    const m = undoable();
     if (!window.Workshop.undo()) {
       S.messages.push({ role: 'a', text: 'There\'s nothing to undo.' });
       paint(true);
       return;
     }
-    const m = [...S.messages].reverse().find((x) => x.kind === 'applied' && !x.undone);
+    if (m && m.kind === 'acquisition') {
+      Object.assign(m, { state: 'waiting', seq: null });
+      S.plan = null;
+      S.messages.push({ role: 'a', text: `I've taken the offer off the appointment. The flag for ${m.result.reg} is waiting again.` });
+      window.App.showPlanner();
+      paint(true);
+      return;
+    }
     if (m) m.undone = true;
     if (m && m.booking) {
       const sug = S.messages.find((x) => x.kind === 'booking-suggestion' && x.id === m.booking.id);
       if (sug) sug.booked = null;
+      // A flag for a booking that no longer exists isn't needed.
+      S.messages.filter((x) => x.kind === 'acquisition' && x.id === m.booking.id && x.state === 'waiting').forEach((x) => { x.state = 'withdrawn'; });
     }
     S.plan = null;
     S.messages.push({ role: 'a', text: 'I\'ve put the diary back as it was.' });
@@ -985,6 +1004,71 @@ window.Copilot = (function () {
     return `${Math.floor(left)}h ${String(Math.floor((left % 1) * 60)).padStart(2, '0')}m`;
   }
 
+  /* ---------- service line acquisition ---------- */
+
+  /**
+   * After a booking: would the used car team want this car? If so, flag it to the advisor
+   * with a suggested offer. Nothing is said to the customer.
+   */
+  async function checkAcquisition(plan) {
+    const sug = findMsg('booking-suggestion', plan.booking.id);
+    const appt = plan.changes[0];
+    if (!sug || !appt || !window.Acquisition) return;
+    const car = window.Vehicles.lookup(sug.form.reg);
+    if (!car) return;
+    // Work done on this visit is paid for by the customer, so it isn't reconditioning.
+    const fixed = [...(sug.extras || []).map((x) => x.id), ...(window.Vehicles.COVERS[sug.form.type] || [])];
+    const result = window.Acquisition.assess(car, appt.from[0], fixed);
+    if (!result) return;
+    await runSteps([`Checking ${car.reg} against used stock`, 'Working out an offer from its condition']);
+    S.messages.push({
+      role: 'a', kind: 'acquisition', id: plan.booking.id, cardId: appt.id, customer: sug.form.customer.trim() || 'the customer',
+      when: appt.from, result, state: 'waiting', seq: null,
+    });
+  }
+
+  function referAcquisition(id) {
+    const m = findMsg('acquisition', id);
+    if (!m || m.state !== 'waiting' || S.busy) return;
+    const r = m.result;
+    window.Workshop.apply({ changes: [{ kind: 'offer', id: m.cardId, amount: r.offer, low: r.low, high: r.high, by: 'You (Service)', at: '09:42' }] });
+    Object.assign(m, { state: 'referred', seq: ++undoSeq });
+    window.App.showPlanner();
+    paint(true);
+  }
+
+  function dismissAcquisition(id) {
+    const m = findMsg('acquisition', id);
+    if (!m || m.state !== 'waiting') return;
+    m.state = 'dismissed';
+    paint(true);
+  }
+
+  function acquisitionHtml(m) {
+    const r = m.result;
+    const when = `${shortDay(m.when[0])} ${hhmm(m.when[1])}`;
+    const range = `${gbp0(r.low)} to ${gbp0(r.high)}`;
+    const head = `<div class="bk-h">Acquisition opportunity</div>`;
+    if (m.state === 'referred') {
+      return `<div class="ccard acq is-done">${head}<div class="c-result"><span class="done-tick">${ic('check', 'sm')}</span>Referred to the used car team</div>
+        <div class="sm">Referred by you (Service) at 09:42. Suggested offer ${gbp0(r.offer)} (range ${range}), prepared on ${esc(when)}'s appointment for the salesperson.</div>
+        <div class="c-acts"><button class="btn s" data-a="go-planner">Show on planner</button><button class="btn s" data-a="plan-undo">Undo</button></div>
+        <div class="safe">${ic('info', 'sm')}If the car is bought, the referral is credited to Service.</div></div>`;
+    }
+    if (m.state === 'dismissed' || m.state === 'withdrawn') {
+      return `<div class="ccard acq off">${head}<div class="sm">${esc(r.reg)}: ${m.state === 'dismissed' ? 'Dismissed. Nothing was sent.' : "The booking was undone, so this isn't needed."}</div></div>`;
+    }
+    const rows = r.lines.map((l) => `<tr><td>${esc(l.label)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</td><td class="n ${l.amount < 0 ? 'neg' : ''}">${l.amount < 0 ? '−' : ''}${gbp0(Math.abs(l.amount))}</td></tr>`).join('');
+    return `<div class="ccard acq">${head}
+      <div class="c-result">The used car team would want this car</div>
+      <div class="acq-car"><div><b>${esc(r.title)}</b>${esc(r.reg)} · ${esc(AS.dateOf(AS.toN(r.registered)).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }))} · about ${r.miles.toLocaleString('en-GB')} miles</div><div><b>${esc(m.customer)}</b>in ${esc(when)}</div></div>
+      <ul class="acq-why">${r.reasons.map((x) => `<li><b>${esc(x.head)}</b> ${esc(x.text)}</li>`).join('')}</ul>
+      <div class="acq-offer"><div><span class="xs muted">Suggested offer</span><b>${gbp0(r.offer)}</b></div><span>Range ${range}<br>${gbp0(r.aboveTrade)} above trade value</span></div>
+      <table class="acq-t">${rows}<tr class="tot"><td>Suggested offer (rounded)</td><td class="n">${gbp0(r.offer)}</td></tr></table>
+      <div class="c-acts"><button class="btn s p" data-a="acq-refer" data-m="${m.id}">Refer to used car team</button><button class="btn s" data-a="acq-dismiss" data-m="${m.id}">Dismiss</button></div>
+      <div class="safe">${ic('lock', 'sm')}Nothing is said to ${esc(m.customer)}. The used car manager sets the final price, subject to inspection.</div></div>`;
+  }
+
   /** Recommended work waiting on the customer, each with a way into its repair order's Recommended Work tab. */
   function pendingHtml(m) {
     const RO = window.RepairOrders;
@@ -1172,5 +1256,6 @@ window.Copilot = (function () {
   return { setMode, mode: () => S.mode, send, setOpen, newChat, jump, toggleSteps, isOpen: () => S.open, applyFilter, reopen, setContext, state: () => S.state, plan: () => S.plan, planChanged, applyPlan, undoPlan, formInput, bookingType, nextStep, toggleExtra, toggleMore, extrasMileage, findTechnician, book, previewBooking,
     agentBegin, agentEnd, agentStartBooking, setExtras, bookingInfo, callSummary, resetForCall, busy: () => S.busy,
     swapRequest, previewSwap, declineSwap, approveSwap, applySwap, notifyCustomer, swaps: () => S.messages.filter((m) => m.kind === 'swap'),
-    swapFinished, applyApproval, truncate, messageCount: () => S.messages.length };
+    swapFinished, applyApproval, truncate, messageCount: () => S.messages.length,
+    referAcquisition, dismissAcquisition, acquisitions: () => S.messages.filter((m) => m.kind === 'acquisition') };
 })();

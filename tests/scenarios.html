@@ -211,9 +211,16 @@ async function run() {
     const f = await freshApp();
     const w = f.contentWindow;
     // The copilot route in first, then the approval itself, on the same copy of the app.
-    for (const [name, check] of [['Asking the copilot for unapproved work', checkPendingRoute], ['One-click parts order', checkApproval]]) {
+    for (const [name, check] of [['Asking the copilot for unapproved work', checkPendingRoute], ['One-click parts order', checkApproval], ['Service line acquisition', checkAcquisition]]) {
       let res;
-      try { if (check === checkPendingRoute) await prep(w); res = await check(w); } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
+      try {
+        if (check === checkPendingRoute) {
+          await prep(w);
+          // The Patel call books through the same flow, so its car must not have been flagged.
+          if (w.Copilot.acquisitions().length) throw new Error('A flag appeared before the acquisition story');
+        }
+        res = await check(w);
+      } catch (e) { res = { ok: false, got: `Error: ${e.message}` }; }
       total++; if (res.ok) pass++;
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${setup}</td><td>${name}</td><td class="${res.ok ? 'pass' : 'fail'}">${res.ok ? 'Pass' : 'Fail'}</td><td></td>`;
@@ -303,6 +310,60 @@ const PARTS_SETUPS = {
     if (s) await w.Copilot.approveSwap(s.id, { speed: 25 });
   },
 };
+
+/* ---------- service line acquisition ---------- */
+
+/** Books a car through the copilot's booking form, as an advisor would. ticks: extra ids, or null for the default. */
+async function bookViaForm(w, reg, ticks) {
+  const C = w.Copilot;
+  const id = await C.agentStartBooking({ customer: 'Test Customer', phone: '07700 900000', reg, type: 'Major service', date: FRIDAY, window: 'morning' }, 1);
+  await C.nextStep(id);
+  if (ticks && C.bookingInfo(id).extras) C.setExtras(id, ticks);
+  if (!C.bookingInfo(id).suggestion) await C.findTechnician(id);
+  await C.book(id, 0);
+  const sug = C.bookingInfo(id).suggestion;
+  return { id, booked: !!sug && sug.booked === 0, flag: C.acquisitions().find((m) => m.id === id) };
+}
+
+/** Books Mr Okafor's Kia both ways, refers one, and checks Undo and the other cars. */
+async function checkAcquisition(w) {
+  const A = w.Acquisition;
+  const car = w.Vehicles.lookup('KS22 VRT');
+  const covers = w.Vehicles.COVERS['Major service'];
+  const fails = [];
+
+  // Default path: the pads and wipers are ticked, so only the cosmetic marks are reconditioning.
+  const a = await bookViaForm(w, 'KS22 VRT', null);
+  const r = a.flag && a.flag.result;
+  const expect = A.assess(car, FRIDAY, ['front-pads', 'wipers', ...covers]);
+  if (!r) return { ok: false, got: `No flag. Booked: ${a.booked}` };
+  if (r.offer !== expect.offer || r.mechanical.length || r.cosmetic.reduce((s, c) => s + c.price, 0) !== 275 || r.offer < 20000 || r.offer > 22000) fails.push(`default offer ${r.offer}`);
+
+  // Refer marks the planner card; Undo takes it off and the flag waits again.
+  w.Copilot.referAcquisition(a.id);
+  const marked = w.Workshop.snapshot().cards.find((c) => c.id === a.flag.cardId);
+  if (!marked || !marked.offer || marked.offer.amount !== r.offer || a.flag.state !== 'referred') fails.push('refer');
+  w.Copilot.undoPlan();
+  const unmarked = w.Workshop.snapshot().cards.find((c) => c.id === a.flag.cardId);
+  if (!unmarked || unmarked.offer || a.flag.state !== 'waiting') fails.push('undo referral');
+  w.Copilot.undoPlan();
+  if (a.flag.state !== 'withdrawn' || w.Workshop.snapshot().cards.some((c) => c.id === a.flag.cardId)) fails.push('undo booking');
+
+  // Nothing ticked: the pads and wipers become reconditioning, so the offer drops.
+  const b = await bookViaForm(w, 'KS22 VRT', []);
+  const rb = b.flag && b.flag.result;
+  if (!rb || rb.offer >= r.offer || ['front-pads', 'wipers'].some((x) => !rb.mechanical.some((m) => m.id === x))) fails.push(`nothing-ticked offer ${rb && rb.offer}`);
+
+  // Cars the used car team doesn't need get no flag.
+  const others = [];
+  for (const reg of ['SC20 UYT', 'YF70 KTO', 'KY72 BLN', 'GN19 HVD', 'AB12 CDE']) {
+    const o = await bookViaForm(w, reg, null);
+    if (o.flag) others.push(reg);
+  }
+  if (others.length) fails.push(`flagged ${others.join(', ')}`);
+
+  return { ok: !fails.length, got: `Offer £${r.offer} (range £${r.low}–£${r.high}), £${rb && rb.offer} with nothing ticked; refer and undo ${fails.some((f) => /undo|refer/.test(f)) ? 'FAILED' : 'work'}; other cars ${others.length ? 'FLAGGED' : 'not flagged'}${fails.length ? `. Failed: ${fails.join('; ')}` : ''}` };
+}
 
 /** Asks Service's copilot for unapproved work and follows its button to the same Recommended Work screen. */
 async function checkPendingRoute(w) {

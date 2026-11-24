@@ -185,6 +185,10 @@ window.Workshop = (function () {
         // An existing appointment to a new time, technician and bay, e.g. one side of a swap.
         const card = target.cards.find((x) => x.id === c.id);
         Object.assign(card, { res: c.res, bay: c.bay, from: c.from, to: c.to, ghost: 0, [mark]: true });
+      } else if (c.kind === 'offer') {
+        // An acquisition offer prepared for the salesperson, on the car's appointment.
+        const card = target.cards.find((x) => x.id === c.id);
+        if (card) { card.offer = { amount: c.amount, low: c.low, high: c.high, by: c.by, at: c.at }; card[mark] = true; }
       } else if (c.kind === 'mark') {
         // Preview only: flags a card that would move, without saying where to yet.
         const card = target.cards.find((x) => x.id === c.id);
@@ -200,7 +204,8 @@ window.Workshop = (function () {
     const hidden = (state.filters.size && !jobMatches(c)) || (state.query && !jobMatches(c));
     const sub = state.view === 'bay' ? `${c.res} - ${c.l2}` : c.bay ? `${c.bay} - ${c.l2}` : c.l2;
     const cls = [c.ghost ? 'ghost' : '', hidden ? 'dim' : '', c.ai ? 'ai' : '', c.prop ? 'prop' : '', c.moving ? 'moving' : ''].join(' ');
-    return `<div class="pl-card ${cls}" style="left:${left}px;width:${width}px" title="${esc(c.l1 + ' · ' + sub)}"><div>${c.moving ? '<b class="pl-moving">Would move</b> ' : ''}${esc(c.l1)}</div><div><small>${esc(sub)}</small></div></div>`;
+    const offer = c.offer ? ` · Offer prepared, £${c.offer.amount.toLocaleString('en-GB')}` : '';
+    return `<div class="pl-card ${cls}" style="left:${left}px;width:${width}px" title="${esc(c.l1 + ' · ' + sub + offer)}"><div>${c.moving ? '<b class="pl-moving">Would move</b> ' : ''}${c.offer ? '<b class="pl-offer">£ Offer prepared</b> ' : ''}${esc(c.l1)}</div><div><small>${esc(sub)}</small></div></div>`;
   }
 
   function renderBayRows(start, days, h) {

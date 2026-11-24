@@ -226,3 +226,23 @@
 .plan-note b { display: block; font-weight: 600; }
 .plan-note span { font-size: 12.5px; color: var(--ink-2); }
 
+
+/* Service line acquisition: the flag for the advisor */
+.ccard.acq { border-left: 4px solid var(--brand); }
+.ccard.acq.is-done { border-left-color: var(--ok); }
+.ccard.acq.off { border-left-color: var(--line); }
+.acq-car { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: 12.5px; background: #f6f5f9; border-radius: 8px; }
+.acq-car > div:last-child { text-align: right; white-space: nowrap; }
+.acq-car b { display: block; }
+.acq-why { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 17px; color: var(--ink-2); }
+.acq-why b { color: var(--ink); }
+.acq-offer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--brand-50); border-radius: 8px; }
+.acq-offer > div { display: flex; flex-direction: column; }
+.acq-offer b { font: 700 20px/24px 'Outfit', sans-serif; color: var(--brand); }
+.acq-offer > span { font-size: 12px; text-align: right; color: var(--ink-2); }
+.acq-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.acq-t td { padding: 4px 0; vertical-align: top; border-bottom: 1px solid #f1f0f4; }
+.acq-t td span { display: block; font-size: 11.5px; color: var(--muted); }
+.acq-t td.n { padding-left: 8px; text-align: right; white-space: nowrap; }
+.acq-t td.neg { color: var(--amber); }
+.acq-t .tot td { font-weight: 700; border-top: 1px solid var(--line); border-bottom: 0; }
